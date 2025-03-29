@@ -77,63 +77,80 @@ function resolveImportPath(importPath: string, tsConfig: LoadTSConfig) {
 const tsConfig = loadTsConfig();
 
 function processImports(code: string, basePath: string) {
-  return code.replace(
-    /import\s+(?:(?:[\w*\s{},]+\s+from\s+)|(?:(?:(?:\{[^}]*\})|(?:[^{}\s,]+))?\s*(?:,\s*(?:\{[^}]*\}|\*\s+as\s+[^{}\s,]+))?\s+from\s+))?['"]([^'"]+)['"]/g,
-    (match, importPath) => {
-      let resolvedPath = importPath;
+  return code.replace(/import\s+(?:.*?from\s+)?['"]([^'"]+)['"]/g, (match, importPath) => {
+    let resolvedPath = importPath;
 
-      if (importPath.startsWith('.')) {
-        resolvedPath = resolve(dirname(basePath), importPath);
-      } else {
-        resolvedPath = resolveImportPath(importPath, tsConfig);
-      }
-
-      let isTsx = false;
-      if (!extname(resolvedPath)) {
-        const possibleExtensions = ['.ts', '.js', '.mts', '.mjs', '.jsx', '.tsx'];
-        for (const ext of possibleExtensions) {
-          if (existsSync(resolvedPath + ext)) {
-            resolvedPath += ext;
-            isTsx = ext === '.tsx';
-            break;
-          }
-        }
-      } else {
-        isTsx = resolvedPath.endsWith('.tsx');
-      }
-
-      const tempFileName = `${basename(resolvedPath, extname(resolvedPath))}-copy.mjs`;
-      const tempFilePath = join(dirname(basePath), tempFileName);
-
-      if (existsSync(resolvedPath)) {
-        const dependencySource = readFileSync(resolvedPath, 'utf-8');
-        let processedDepCode = dependencySource;
-
-        if (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.mts') || isTsx) {
-          const { code: depCode } = transformSync(dependencySource, {
-            jsc: {
-              parser: { syntax: 'typescript', tsx: isTsx },
-              target: 'es2022',
-            },
-          });
-          processedDepCode = depCode;
-        }
-
-        processedDepCode = processImports(processedDepCode, resolvedPath);
-        writeFileSync(tempFilePath, processedDepCode);
-        allTempFiles.push(tempFilePath);
-
-        const fileUrl = pathToFileURL(tempFilePath).href;
-        return match.replace(importPath, fileUrl);
-      }
-
-      return match;
+    if (importPath.startsWith('.')) {
+      resolvedPath = resolve(dirname(basePath), importPath);
+    } else {
+      resolvedPath = resolveImportPath(importPath, tsConfig);
     }
-  );
+
+    const nodeModulesPath = resolve(projectRoot, 'node_modules', importPath);
+
+    // 1. Index in the folder
+    const indexJsPath = join(nodeModulesPath, 'index.js');
+    const indexMjsPath = join(nodeModulesPath, 'index.mjs');
+    if (existsSync(indexJsPath)) {
+      return match.replace(importPath, pathToFileURL(indexJsPath).href);
+    } else if (existsSync(indexMjsPath)) {
+      return match.replace(importPath, pathToFileURL(indexMjsPath).href);
+    }
+
+    // 2. Direct File Name
+    const jsFilePath = `${nodeModulesPath}.js`;
+    const mjsFilePath = `${nodeModulesPath}.mjs`;
+    if (existsSync(jsFilePath)) {
+      return match.replace(importPath, pathToFileURL(jsFilePath).href);
+    } else if (existsSync(mjsFilePath)) {
+      return match.replace(importPath, pathToFileURL(mjsFilePath).href);
+    }
+
+    let isTsx = false;
+    if (!extname(resolvedPath)) {
+      const possibleExtensions = ['.js', '.ts', '.mjs', '.mts', '.jsx', '.tsx'];
+      for (const ext of possibleExtensions) {
+        if (existsSync(resolvedPath + ext)) {
+          resolvedPath += ext;
+          isTsx = ext === '.tsx';
+          break;
+        }
+      }
+    } else {
+      isTsx = resolvedPath.endsWith('.tsx');
+    }
+
+    const tempFileName = `${basename(resolvedPath, extname(resolvedPath))}-copy.mjs`;
+    const tempFilePath = join(dirname(basePath), tempFileName);
+
+    if (existsSync(resolvedPath)) {
+      const dependencySource = readFileSync(resolvedPath, 'utf-8');
+      let processedDepCode = dependencySource;
+
+      if (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.mts') || isTsx) {
+        const { code: depCode } = transformSync(dependencySource, {
+          jsc: {
+            parser: { syntax: 'typescript', tsx: isTsx },
+            target: 'es2022',
+          },
+        });
+        processedDepCode = depCode;
+      }
+
+      processedDepCode = processImports(processedDepCode, resolvedPath);
+      writeFileSync(tempFilePath, processedDepCode);
+      allTempFiles.push(tempFilePath);
+
+      const fileUrl = pathToFileURL(tempFilePath).href;
+      return match.replace(importPath, fileUrl);
+    }
+
+    return match;
+  });
 }
 
 export async function execute(filePath: string): Promise<unknown> {
-  const ext = filePath.match(/\.(ts|js|mts|mjs|tsx|jsx|cjs|cts)$/)?.[1];
+  const ext = filePath.match(/\.(js|ts|mjs|mts|jsx|tsx|cjs|cts)$/)?.[1];
   if (!ext) throw new Error('Unsupported file extension');
   if (ext === 'cjs' || ext === 'cts') {
     throw new Error(`Error: rscute supports only ESM (ECMAScript Modules).\n` + `Please use .js/.ts, .mjs/.mts.\n` + `Received a CommonJS file: ${filePath}`);
@@ -141,7 +158,7 @@ export async function execute(filePath: string): Promise<unknown> {
 
   const absoluteFilePath = resolve(filePath);
   const source = readFileSync(absoluteFilePath, 'utf-8');
-  const isModule = ext === 'mjs' || ext === 'mts' || ext === 'js' || ext === 'ts' || ext === 'jsx' || ext === 'tsx';
+  const isModule = ext === 'js' || ext === 'ts' || ext === 'mjs' || ext === 'mts' || ext === 'jsx' || ext === 'tsx';
   const isTsx = ext === 'tsx';
 
   const { code } = transformSync(source, {
