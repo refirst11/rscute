@@ -26,6 +26,7 @@
   ],
   "scripts": {
     "build": "rimraf dist types && npx tsc && node shebang",
+    "minify": "npx terser dist/execute.js -co dist/execute.js ",
     "test": "node dist/esm/execute.js test/test.tsx"
   },
   "dependencies": {
@@ -34,6 +35,7 @@
   "devDependencies": {
     "@types/node": "^22.13.11",
     "rimraf": "^6.0.1",
+    "terser": "^5.39.0",
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
