@@ -7,12 +7,11 @@ import { cwd } from 'process';
 type LoadTSConfig = null | { paths: Record<string, string[]>; baseUrl: string };
 const allTempFiles: string[] = [];
 
-function genTempFileName(filePath: string) {
+function genTempFileName() {
   const ns = process.hrtime.bigint();
   const nslast = ns.toString().slice(-7);
   const hash = Math.random().toString(36).slice(2, 9);
-  const base = basename(filePath, extname(filePath));
-  const result = base + '-tmp' + nslast + hash + '.mjs';
+  const result = nslast + hash + '-tmp' + '.mjs';
   return result;
 }
 
@@ -184,7 +183,7 @@ export async function execute(filePath: string): Promise<any> {
 
   if (isModule) {
     const baseDir = dirname(absoluteFilePath);
-    const tempFilePath = join(baseDir, genTempFileName(filePath));
+    const tempFilePath = join(baseDir, genTempFileName());
     writeFileSync(tempFilePath, processedCode);
     allTempFiles.push(tempFilePath);
 
