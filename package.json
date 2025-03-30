@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "Rust Execute (rscute): Node.js with SWC to run TypeScript & ESM files",
   "keywords": [
@@ -18,7 +18,7 @@
   "main": "dist/execute.js",
   "types": "types/execute.d.ts",
   "bin": {
-    "rscute": "./dist/esm/execute.js"
+    "rscute": "./dist/execute.js"
   },
   "files": [
     "dist/",
