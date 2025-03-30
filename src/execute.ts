@@ -158,7 +158,7 @@ function processImports(code: string, basePath: string) {
   });
 }
 
-export async function execute(filePath: string): Promise<unknown> {
+export async function execute(filePath: string): Promise<any> {
   const ext = filePath.match(/\.(js|ts|mjs|mts|jsx|tsx|cjs|cts)$/)?.[1];
   if (!ext) throw new Error('Unsupported file extension');
   if (ext === 'cjs' || ext === 'cts') {
