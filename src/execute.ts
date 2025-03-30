@@ -7,6 +7,15 @@ import { cwd } from 'process';
 type LoadTSConfig = null | { paths: Record<string, string[]>; baseUrl: string };
 const allTempFiles: string[] = [];
 
+function genTempFileName(filePath: string) {
+  const ns = process.hrtime.bigint();
+  const nslast = ns.toString().slice(-7);
+  const hash = Math.random().toString(36).slice(2, 9);
+  const base = basename(filePath, extname(filePath));
+  const result = base + '-tmp' + nslast + hash + '.mjs';
+  return result;
+}
+
 function cleanupTempFiles() {
   for (const file of allTempFiles) {
     try {
@@ -120,7 +129,7 @@ function processImports(code: string, basePath: string) {
       isTsx = resolvedPath.endsWith('.tsx');
     }
 
-    const tempFileName = `${basename(resolvedPath, extname(resolvedPath))}-copy.mjs`;
+    const tempFileName = genTempFileName(resolvedPath);
     const tempFilePath = join(dirname(basePath), tempFileName);
 
     if (existsSync(resolvedPath)) {
@@ -175,7 +184,7 @@ export async function execute(filePath: string): Promise<unknown> {
 
   if (isModule) {
     const baseDir = dirname(absoluteFilePath);
-    const tempFilePath = join(baseDir, `main-copy.mjs`);
+    const tempFilePath = join(baseDir, genTempFileName(filePath));
     writeFileSync(tempFilePath, processedCode);
     allTempFiles.push(tempFilePath);
 
