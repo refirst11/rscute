@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 
 (async () => {
-  const filePath = './dist/esm/execute.js';
+  const filePath = './dist/execute.js';
   const shebang = '#!/usr/bin/env node\n';
 
   try {

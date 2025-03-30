@@ -15,16 +15,17 @@
   "author": "Refirst",
   "repository": "refirst11/rscute",
   "license": "MIT",
-  "main": "dist/esm/execute.js",
-  "types": "dist/types/execute.d.ts",
+  "main": "dist/execute.js",
+  "types": "types/execute.d.ts",
   "bin": {
     "rscute": "./dist/esm/execute.js"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "types"
   ],
   "scripts": {
-    "build": "rimraf dist && npx tsc && node shebang",
+    "build": "rimraf dist types && npx tsc && node shebang",
     "test": "node dist/esm/execute.js test/test.tsx"
   },
   "dependencies": {
