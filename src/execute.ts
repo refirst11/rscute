@@ -129,7 +129,7 @@ function processImports(code: string, basePath: string) {
       isTsx = resolvedPath.endsWith('.tsx');
     }
 
-    const tempFileName = genTempFileName(resolvedPath);
+    const tempFileName = `${basename(resolvedPath, extname(resolvedPath))}-tmp.mjs`;
     const tempFilePath = join(dirname(basePath), tempFileName);
 
     if (existsSync(resolvedPath)) {
