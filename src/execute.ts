@@ -120,7 +120,8 @@ function processImports(code: string, basePath: string) {
       isTsx = resolvedPath.endsWith('.tsx');
     }
 
-    const tempFileName = `${basename(resolvedPath, extname(resolvedPath))}-tmp.mjs`;
+    const ext = extname(resolvedPath);
+    const tempFileName = `${basename(resolvedPath, ext)}-${ext.slice(1)}-tmp.mjs`;
     const tempFilePath = join(dirname(basePath), tempFileName);
 
     if (existsSync(resolvedPath)) {
@@ -174,7 +175,7 @@ export async function execute(filePath: string): Promise<any> {
   const processedCode = processImports(code, absoluteFilePath);
 
   if (isModule) {
-    const tempFileName = `${basename(filePath, extname(filePath))}-tmp.mjs`;
+    const tempFileName = `${basename(filePath, ext)}-${ext.slice(1)}-tmp.mjs`;
     const tempFilePath = join(dirname(absoluteFilePath), tempFileName);
     writeFileSync(tempFilePath, processedCode);
     allTempFiles.push(tempFilePath);
