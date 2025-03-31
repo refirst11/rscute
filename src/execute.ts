@@ -107,8 +107,8 @@ function processImports(code: string, basePath: string) {
     }
 
     let isTsx = false;
+    const possibleExtensions = ['.js', '.ts', '.mjs', '.mts', '.jsx', '.tsx'];
     if (!extname(resolvedPath)) {
-      const possibleExtensions = ['.js', '.ts', '.mjs', '.mts', '.jsx', '.tsx'];
       for (const ext of possibleExtensions) {
         if (existsSync(resolvedPath + ext)) {
           resolvedPath += ext;
@@ -121,6 +121,7 @@ function processImports(code: string, basePath: string) {
     }
 
     const ext = extname(resolvedPath);
+    if (!possibleExtensions.includes(ext)) return match;
     const tempFileName = `${basename(resolvedPath, ext)}-${ext.slice(1)}-tmp.mjs`;
     const tempFilePath = join(dirname(basePath), tempFileName);
 
@@ -151,6 +152,8 @@ function processImports(code: string, basePath: string) {
 }
 
 export async function execute(filePath: string): Promise<any> {
+  // extname(filePath) contains dots.
+  // filePath.match does not contain dots.
   const ext = filePath.match(/\.(js|ts|mjs|mts|jsx|tsx|cjs|cts)$/)?.[1];
   if (!ext) throw new Error('Unsupported file extension');
   if (ext === 'cjs' || ext === 'cts') {
@@ -159,7 +162,6 @@ export async function execute(filePath: string): Promise<any> {
 
   const absoluteFilePath = resolve(filePath);
   const source = readFileSync(absoluteFilePath, 'utf-8');
-  const isModule = ext === 'js' || ext === 'ts' || ext === 'mjs' || ext === 'mts' || ext === 'jsx' || ext === 'tsx';
   const isTsx = ext === 'tsx';
 
   const { code } = transformSync(source, {
@@ -174,22 +176,20 @@ export async function execute(filePath: string): Promise<any> {
 
   const processedCode = processImports(code, absoluteFilePath);
 
-  if (isModule) {
-    const tempFileName = `${basename(filePath, ext)}-${ext.slice(1)}-tmp.mjs`;
-    const tempFilePath = join(dirname(absoluteFilePath), tempFileName);
-    writeFileSync(tempFilePath, processedCode);
-    allTempFiles.push(tempFilePath);
+  const tempFileName = `${basename(filePath, extname(filePath))}-${ext}-tmp.mjs`;
+  const tempFilePath = join(dirname(absoluteFilePath), tempFileName);
+  writeFileSync(tempFilePath, processedCode);
+  allTempFiles.push(tempFilePath);
 
-    const fileUrl = pathToFileURL(tempFilePath).href;
+  const fileUrl = pathToFileURL(tempFilePath).href;
 
-    try {
-      return await import(fileUrl);
-    } catch (err) {
-      console.error('Error during execution:', err);
-      throw err;
-    } finally {
-      cleanupTempFiles();
-    }
+  try {
+    return await import(fileUrl);
+  } catch (err) {
+    console.error('Error during execution:', err);
+    throw err;
+  } finally {
+    cleanupTempFiles();
   }
 }
 
