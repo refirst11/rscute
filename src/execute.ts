@@ -129,7 +129,7 @@ function processImports(code: string, basePath: string) {
       const dependencySource = readFileSync(resolvedPath, 'utf-8');
       let processedDepCode = dependencySource;
 
-      if (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.mts') || isTsx) {
+      if (ext === '.ts' || ext === '.mts' || isTsx) {
         const { code: depCode } = transformSync(dependencySource, {
           jsc: {
             parser: { syntax: 'typescript', tsx: isTsx },
@@ -186,7 +186,7 @@ export async function execute(filePath: string): Promise<any> {
   try {
     return await import(fileUrl);
   } catch (err) {
-    console.error('Error during execution:', err);
+    console.error('Execution failed:', err);
     throw err;
   } finally {
     cleanupTempFiles();
@@ -194,8 +194,7 @@ export async function execute(filePath: string): Promise<any> {
 }
 
 if (process.argv[2]) {
-  execute(process.argv[2]).catch(err => {
-    console.error('Execution failed:', err);
+  execute(process.argv[2]).catch(() => {
     process.exit(1);
   });
 }
