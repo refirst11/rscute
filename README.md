@@ -1,6 +1,6 @@
-# rscute &middot; ![SWC](https://img.shields.io/badge/powered%20by-SWC-blue)
+# rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-SWC-blue)](https://swc.rs/)
 
-Faster Executor for TypeScript using @swc/core
+Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core)
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm i -D rscute
 
 ## Usage
 
-Run a TypeScript file directly:
+Run a TypeScript file **directly**:
 
 ```sh
 npx rscute script.ts
