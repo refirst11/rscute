@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "type": "module",
   "description": "Rust Execute (rscute): Run TypeScript & ESM files in Node.js with SWC",
   "keywords": [
@@ -25,8 +25,7 @@
     "types/"
   ],
   "scripts": {
-    "build": "rimraf dist types && npx tsc && node shebang && pnpm minify",
-    "minify": "npx terser dist/execute.js -co dist/execute.js ",
+    "build": "rimraf dist types && npx tsc && node shebang",
     "test": "node dist/execute.js test/test.tsx"
   },
   "dependencies": {
@@ -35,7 +34,6 @@
   "devDependencies": {
     "@types/node": "^22.13.17",
     "rimraf": "^6.0.1",
-    "terser": "^5.39.0",
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
