@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'url';
 import { readFileSync, existsSync, unlinkSync, writeFileSync } from 'fs';
-import { resolve, dirname, basename, extname, join } from 'path';
+import { resolve, dirname, basename, extname, join, sep } from 'path';
 import { transformSync } from '@swc/core';
 import { cwd } from 'process';
 
@@ -152,6 +152,11 @@ function processImports(code: string, basePath: string) {
 }
 
 export async function execute(filePath: string): Promise<any> {
+  // The start of absolutePath first matches the absolute path of projectRoot.
+  const absoluteFilePath = resolve(filePath);
+  if (!absoluteFilePath.startsWith(projectRoot + sep)) {
+    throw new Error('Invalid path: must use absolute path within project:' + projectRoot);
+  }
   // extname(filePath) contains dots.
   // filePath.match does not contain dots.
   const ext = filePath.match(/\.(js|ts|mjs|mts|jsx|tsx|cjs|cts)$/)?.[1];
@@ -160,7 +165,6 @@ export async function execute(filePath: string): Promise<any> {
     throw new Error(`Error: rscute supports only ESM (ECMAScript Modules).\n` + `Please use .js/.ts, .mjs/.mts.\n` + `Received a CommonJS file: ${filePath}`);
   }
 
-  const absoluteFilePath = resolve(filePath);
   const source = readFileSync(absoluteFilePath, 'utf-8');
   const isTsx = ext === 'tsx';
 
