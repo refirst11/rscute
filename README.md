@@ -20,10 +20,13 @@ npx rscute script.ts
 
 `await import()` to replace `await execute()`
 
+The **argument** must be an **absolute** path within the **project**.  
+When loading the **package**, use the standard **import()**.
+
 ```ts
 import { execute } from 'rscute';
 
-await execute('./module.js');
+await execute(absolutePath);
 ```
 
 ## Concept
