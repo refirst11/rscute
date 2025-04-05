@@ -14,18 +14,18 @@ function cleanupTempFiles() {
         unlinkSync(file);
       }
     } catch (err) {
-      console.warn(`Failed to delete temporary file ${file}:`, err);
+      console.warn('Failed to delete temporary file ' + file + ':', err);
     }
   }
   allTempFiles.length = 0;
 }
 
 function findProjectRoot() {
-  // Return the original cwd when the route is reached
+  // Return the directory when the route is reached
   let currentDir = cwd();
-  while (!existsSync(join(currentDir, 'package.json')) && !existsSync(join(currentDir, 'tsconfig.json'))) {
+  while (!existsSync(join(currentDir, 'package.json'))) {
     const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) return cwd();
+    if (parentDir === currentDir) return currentDir;
     currentDir = parentDir;
   }
   return currentDir;
@@ -74,8 +74,6 @@ function resolveImportPath(importPath: string, tsConfig: LoadTSConfig) {
   return resolve(baseDir, importPath);
 }
 
-const tsConfig = loadTsConfig();
-
 function processImports(code: string, basePath: string) {
   return code.replace(/import\s+(?:.*?from\s+)?['"]([^'"]+)['"]/g, (match, importPath) => {
     let resolvedPath = importPath;
@@ -83,6 +81,7 @@ function processImports(code: string, basePath: string) {
     if (importPath.startsWith('.')) {
       resolvedPath = resolve(dirname(basePath), importPath);
     } else {
+      const tsConfig = loadTsConfig();
       resolvedPath = resolveImportPath(importPath, tsConfig);
     }
 
@@ -98,8 +97,8 @@ function processImports(code: string, basePath: string) {
     }
 
     // 2. Direct File Name
-    const jsFilePath = `${nodeModulesPath}.js`;
-    const mjsFilePath = `${nodeModulesPath}.mjs`;
+    const jsFilePath = nodeModulesPath + '.js';
+    const mjsFilePath = nodeModulesPath + '.mjs';
     if (existsSync(jsFilePath)) {
       return match.replace(importPath, pathToFileURL(jsFilePath).href);
     } else if (existsSync(mjsFilePath)) {
@@ -122,7 +121,7 @@ function processImports(code: string, basePath: string) {
 
     const ext = extname(resolvedPath);
     if (!possibleExtensions.includes(ext)) return match;
-    const tempFileName = `${basename(resolvedPath, ext)}-${ext.slice(1)}-tmp.mjs`;
+    const tempFileName = basename(resolvedPath, ext) + '-' + ext.slice(1) + '-tmp.mjs';
     const tempFilePath = join(dirname(basePath), tempFileName);
 
     if (existsSync(resolvedPath)) {
@@ -157,16 +156,15 @@ export async function execute(filePath: string): Promise<any> {
   if (!absoluteFilePath.startsWith(projectRoot + sep)) {
     throw new Error('Invalid path: must use absolute path within project:' + projectRoot);
   }
-  // extname(filePath) contains dots.
-  // filePath.match does not contain dots.
-  const ext = filePath.match(/\.(js|ts|mjs|mts|jsx|tsx|cjs|cts)$/)?.[1];
+
+  const ext = filePath.match(/(\.(?:js|ts|mjs|mts|jsx|tsx|cjs|cts))$/)?.[1];
   if (!ext) throw new Error('Unsupported file extension');
-  if (ext === 'cjs' || ext === 'cts') {
-    throw new Error(`Error: rscute supports only ESM (ECMAScript Modules).\n` + `Please use .js/.ts, .mjs/.mts.\n` + `Received a CommonJS file: ${filePath}`);
+  if (ext === '.cjs' || ext === '.cts') {
+    throw new Error('Error: rscute supports only ESM (ECMAScript Modules).\n' + 'Please use .js/.ts, .mjs/.mts.\n' + 'Received a CommonJS file:' + filePath);
   }
 
   const source = readFileSync(absoluteFilePath, 'utf-8');
-  const isTsx = ext === 'tsx';
+  const isTsx = ext === '.tsx';
 
   const { code } = transformSync(source, {
     module: {
@@ -180,7 +178,7 @@ export async function execute(filePath: string): Promise<any> {
 
   const processedCode = processImports(code, absoluteFilePath);
 
-  const tempFileName = `${basename(filePath, extname(filePath))}-${ext}-tmp.mjs`;
+  const tempFileName = basename(filePath, ext) + '-' + ext.slice(1) + '-tmp.mjs';
   const tempFilePath = join(dirname(absoluteFilePath), tempFileName);
   writeFileSync(tempFilePath, processedCode);
   allTempFiles.push(tempFilePath);
@@ -202,3 +200,7 @@ if (process.argv[2]) {
     process.exit(1);
   });
 }
+
+process.on('exit', () => {
+  cleanupTempFiles();
+});
