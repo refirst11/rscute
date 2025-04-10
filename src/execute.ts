@@ -45,6 +45,23 @@ function loadTsConfig(): LoadTSConfig {
   }
 }
 
+function transformer(source: string, ext: string) {
+  const isTsx = ext === '.tsx';
+  const isTypeScript = ext === '.ts' || ext === '.mts' || isTsx;
+  if (!isTypeScript) return source;
+
+  const { code } = transformSync(source, {
+    module: {
+      type: 'es6',
+    },
+    jsc: {
+      parser: { syntax: 'typescript', tsx: isTsx },
+      target: 'es2022',
+    },
+  });
+  return code;
+}
+
 function resolveImportPath(importPath: string, tsConfig: LoadTSConfig) {
   if (importPath.endsWith('.cjs') || importPath.endsWith('.cts')) {
     throw new Error('rscute cannot import CommonJS files (.cjs/.cts).');
@@ -105,18 +122,14 @@ function processImports(code: string, basePath: string) {
       return match.replace(importPath, pathToFileURL(mjsFilePath).href);
     }
 
-    let isTsx = false;
     const possibleExtensions = ['.js', '.ts', '.mjs', '.mts', '.jsx', '.tsx'];
     if (!extname(resolvedPath)) {
       for (const ext of possibleExtensions) {
         if (existsSync(resolvedPath + ext)) {
           resolvedPath += ext;
-          isTsx = ext === '.tsx';
           break;
         }
       }
-    } else {
-      isTsx = resolvedPath.endsWith('.tsx');
     }
 
     const ext = extname(resolvedPath);
@@ -125,20 +138,9 @@ function processImports(code: string, basePath: string) {
     const tempFilePath = join(dirname(basePath), tempFileName);
 
     if (existsSync(resolvedPath)) {
-      const dependencySource = readFileSync(resolvedPath, 'utf-8');
-      let processedDepCode = dependencySource;
-
-      if (ext === '.ts' || ext === '.mts' || isTsx) {
-        const { code: depCode } = transformSync(dependencySource, {
-          jsc: {
-            parser: { syntax: 'typescript', tsx: isTsx },
-            target: 'es2022',
-          },
-        });
-        processedDepCode = depCode;
-      }
-
-      processedDepCode = processImports(processedDepCode, resolvedPath);
+      const depSource = readFileSync(resolvedPath, 'utf-8');
+      const depCode = transformer(depSource, ext);
+      const processedDepCode = processImports(depCode, resolvedPath);
       writeFileSync(tempFilePath, processedDepCode);
       allTempFiles.push(tempFilePath);
 
@@ -164,18 +166,7 @@ export async function execute(filePath: string): Promise<any> {
   }
 
   const source = readFileSync(absoluteFilePath, 'utf-8');
-  const isTsx = ext === '.tsx';
-
-  const { code } = transformSync(source, {
-    module: {
-      type: 'es6',
-    },
-    jsc: {
-      parser: { syntax: 'typescript', tsx: isTsx },
-      target: 'es2022',
-    },
-  });
-
+  const code = transformer(source, ext);
   const processedCode = processImports(code, absoluteFilePath);
 
   const tempFileName = basename(filePath, ext) + '-' + ext.slice(1) + '-tmp.mjs';
