@@ -1,6 +1,6 @@
 # rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-SWC-blue)](https://swc.rs/)
 
-Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core)
+Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core) & [**VM**](https://nodejs.org/api/vm.html)
 
 ## Installation
 
@@ -18,18 +18,18 @@ npx rscute script.ts
 
 ## Dynamic import
 
-`await import()` to replace `await execute()`
+`await import()` to replace `await JIT()`
 
 ```ts
-import { execute } from 'rscute';
+const { JIT } = require('rscute');
 
-await execute(absolutePath);
+await JIT(absolutePath);
 ```
 
 ## Concept
 
-Since rscute uses **type: module**, execution will be limited to **ESM**.  
-Supported extensions are **.js, .ts, .mjs, .mts, .jsx, .tsx**
+Since rscute executes to **programmatic** and isolated **V8** instance run **in memory**.  
+Supported extensions are **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, .tsx**
 
 ## License
 
