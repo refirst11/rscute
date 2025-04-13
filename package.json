@@ -1,32 +1,38 @@
 {
   "name": "rscute",
-  "version": "0.0.15",
-  "type": "module",
-  "description": "Rust Execute (rscute): Run TypeScript & ESM files in Node.js with SWC",
+  "version": "0.1.0",
+  "description": "Rust Execute (rscute): Run TypeScript ESM & CJS files in VM with SWC",
   "keywords": [
     "cli",
+    "runtime",
     "node",
-    "npx",
+    "swc",
     "rust",
+    "vm",
+    "cjs",
+    "commonjs",
     "esm",
     "typescript",
     "typescript runner"
   ],
   "author": "Refirst",
-  "repository": "refirst11/rscute",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/refirst11/rscute.git"
+  },
   "license": "MIT",
-  "main": "dist/execute.js",
-  "types": "types/execute.d.ts",
+  "main": "dist/jit.js",
+  "types": "types/jit.d.ts",
   "bin": {
-    "rscute": "./dist/execute.js"
+    "rscute": "./dist/jit.js"
   },
   "files": [
     "dist/",
     "types/"
   ],
   "scripts": {
-    "build": "rimraf dist types && npx tsc && node shebang",
-    "test": "node --loader ./dist/execute.js test/test.tsx"
+    "build": "rimraf dist types && npx tsc && node jit_shebang",
+    "test": "node dist/jit.js test/test.tsx"
   },
   "dependencies": {
     "@swc/core": "^1.11.16"
