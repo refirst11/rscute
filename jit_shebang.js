@@ -1,7 +1,7 @@
-import fs from 'fs/promises';
+const fs = require('fs/promises');
 
 (async () => {
-  const filePath = './dist/execute.js';
+  const filePath = './dist/jit.js';
   const shebang = '#!/usr/bin/env node\n';
 
   try {
