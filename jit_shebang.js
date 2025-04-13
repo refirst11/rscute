@@ -12,11 +12,11 @@ const fs = require('fs/promises');
     if (!content.startsWith(shebang)) {
       content = shebang + content;
       await fs.writeFile(filePath, content);
-      console.log('Shebang line added successfully to execute.js');
+      console.log('Shebang line added successfully to jit.js');
     } else {
-      console.log('Shebang line already exists in execute.js');
+      console.log('Shebang line already exists in jit.js');
     }
   } catch (error) {
-    console.error('Error processing execute.js:', error);
+    console.error('Error processing jit.js:', error);
   }
 })();
