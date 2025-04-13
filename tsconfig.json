@@ -2,8 +2,8 @@
   "compilerOptions": {
     "esModuleInterop": true,
     "lib": ["ESNext", "dom"],
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "declaration": true,
     "declarationDir": "./types",
     "outDir": "./dist",
