@@ -166,13 +166,27 @@ function fullCodeGen(code: string, basePath: string): string {
         externalImportSet.add(requireStatement);
         return '';
       }
+      const ext = extname(resolvedPath);
+
+      if (ext === '.tsx' || ext === '.jsx') {
+        // The dependent React Component does not expand or call the code.
+        // This is because you cannot expand tsx components within js, but it is important not to open the scope of tsx itself.
+        // This is because the scope of tsx is opened and the side effects are executed.
+        // The side effects of tsx are executed directly through JIT().
+        /*
+        React JSX is scoped and treated as a `component` which acts as a DOM and confines side effects, so expanding JSX side effects into code is the same as opening the scope.
+        In other words, rscute can process the side effects of tsx, but cannot treat it as a component.
+        If you want to call tsx from tsx as a side effect, you can call it as ts and expand it into code as a dependency.
+        */
+        return '';
+      }
 
       if (!existsSync(resolvedPath)) {
         throw new Error(`Cannot resolve import ${importPath} at ${resolvedPath}`);
       }
 
       // Read the contents of the target file, and if it is TypeScript, transpile it using swc
-      const ext = extname(resolvedPath);
+
       const dependencySource = readFileSync(resolvedPath, 'utf-8');
       const code = transformer(dependencySource, ext);
       // Recursively inline dependent code
