@@ -45,7 +45,6 @@ function resolveImportPath(importPath: string, tsConfig: LoadTSConfig) {
         for (const target of targetPaths) {
           const resolvedTarget = target.replace(/\*$/, '');
           const candidatePath = resolve(baseDir, resolvedTarget + importPath.slice(aliasPrefix.length));
-          // Try all extensions
           for (const ext of extensions) {
             if (existsSync(candidatePath + ext)) {
               return candidatePath + ext;
@@ -64,10 +63,9 @@ function resolveImportPath(importPath: string, tsConfig: LoadTSConfig) {
 }
 
 function transformer(source: string, ext: string) {
-  // Return early if not TypeScript
   const isTsx = ext === '.tsx';
-  const isTypeScript = ext === '.ts' || ext === '.mts' || ext === '.cts' || isTsx;
-  if (!isTypeScript) return source;
+  const isTS = ext === '.ts' || ext === '.mts' || ext === '.cts' || isTsx;
+  if (!isTS) return source;
 
   const { code } = transformSync(source, {
     module: {
@@ -82,39 +80,22 @@ function transformer(source: string, ext: string) {
   return code;
 }
 
-/*
- * As a global collection, the inlined code of relative is stored in bundleStack,
- * and the code that has been rewritten to require calls in external modules such as node_modules is stored in externalImportSet.
- */
 const bundleStack: string[] = [];
 const externalImportSet: Set<string> = new Set();
 
-/*
- * The fullCodeGen function analyzes the import statements in the code passed to it.
- *
- * - For non-relative paths:
- * The import statements are rewritten to require calls, for example "const X = require('module');", and added to externalImportSet.
- *
- * - For relative paths:
- * The resolvedPath is calculated, the target file is read using readFileSync, and in the case of TypeScript, it is transpiled using SWC,
- * and then fullCodeGen is recursively applied to inline the file and stacked on the bundleStack.
- *
- * The import statements themselves are deleted as they have already been inlined.
- */
 function fullCodeGen(code: string, basePath: string): string {
   const tsConfig = loadTsConfig();
   let resolvedPath: string;
-  // Remove export statements
   let processedCode = code
     // Replace await import(...) → require(...)
     .replace(/await\s+import\s*\(\s*(.*?)\s*\)/g, 'require($1)')
-    // module.exports = function  → function
+    // Convert (module.?)exports = function  → function
     .replace(/(?:module\.)?exports\s*=\s*((async\s+)?function\s+\w+\s*\(.*?\)\s*\{[\s\S]*?\});?/gm, '$1')
-    // module.exports = class → class
+    // Convert (module.?)exports = class → class
     .replace(/(?:module\.)?exports\s*=\s*(class\s+\w+\s*\{[\s\S]*?\});?/gm, '$1')
-    // module.exports.XXX = function → function
+    // Convert (module.?)exports.XXX = function → function
     .replace(/(?:module\.)?exports\.\w+\s*=\s*((async\s+)?function\s+\w+\s*\(.*?\)\s*\{[\s\S]*?\});?/gm, '$1')
-    // module.exports.XXX = class → class
+    // Convert (module.?)exports.XXX = class → class
     .replace(/(?:module\.)?exports\.\w+\s*=\s*(class\s+\w+\s*\{[\s\S]*?\});?/gm, '$1')
     // Remove all other module.export lines
     .replace(/(?:module\.)?exports\s*=\s*[^\n;]+;?\s*$/gm, '')
@@ -135,21 +116,21 @@ function fullCodeGen(code: string, basePath: string): string {
     // filename is shim__filename
     .replace(/import\.meta\.filename/g, '__shim_filename');
 
-  const shimCode = `const __shim_dirname = __dirname;\nconst __shim_filename = __filename;\n`;
+  const shim = `const __shim_dirname = __dirname;\nconst __shim_filename = __filename;\n`;
 
-  externalImportSet.add(shimCode);
+  externalImportSet.add(shim);
 
   processedCode = processedCode.replace(
     /(?:import\s+(.*?)\s+from\s+['"]([^'"]+)['"]|(?:const|let|var)\s*({[^}]+}|[\w$_]+)\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\))\s*;?/g,
-    (match, importClause, importPath, requireClause, requirePath) => {
-      const dualPath = importPath || requirePath;
-      if (!dualPath.startsWith('.')) {
-        resolvedPath = resolveImportPath(dualPath, tsConfig);
+    (_match, importClause, importPath, requireClause, requirePath) => {
+      const paths = importPath || requirePath;
+
+      if (!paths.startsWith('.')) {
+        resolvedPath = resolveImportPath(paths, tsConfig);
       } else {
-        // Normal resolution for relative paths
-        resolvedPath = resolve(dirname(basePath), dualPath);
+        resolvedPath = resolve(dirname(basePath), paths);
       }
-      // If the extension is missing, check for possible extensions
+
       if (!extname(resolvedPath)) {
         for (const ext of extensions) {
           if (existsSync(resolvedPath + ext)) {
@@ -160,7 +141,6 @@ function fullCodeGen(code: string, basePath: string): string {
       }
 
       if (!existsSync(resolvedPath)) {
-        // If the target file does not exist, treat it as an external module
         const requireCase = `const ${requireClause} = require('${requirePath}');`;
         const requireStatement = importPath ? convertImportToRequire(importClause, importPath) : requireCase;
         externalImportSet.add(requireStatement);
@@ -185,20 +165,15 @@ function fullCodeGen(code: string, basePath: string): string {
         throw new Error(`Cannot resolve import ${importPath} at ${resolvedPath}`);
       }
 
-      // Read the contents of the target file, and if it is TypeScript, transpile it using swc
-
       const dependencySource = readFileSync(resolvedPath, 'utf-8');
       const code = transformer(dependencySource, ext);
-      // Recursively inline dependent code
       const bundledDependency = fullCodeGen(code, resolvedPath);
       bundleStack.push(bundledDependency);
 
-      // The original import statement has been deleted because it has already been inlined
       return '';
     }
   );
 
-  // Return code other than import statements as is
   return processedCode;
 }
 
@@ -211,8 +186,8 @@ function convertImportToRequire(importClause: string, importPath: string): strin
   // Named imports: import { foo as bar, baz } from 'module' → const { foo: bar, baz } = require('module');
   if (importClause.startsWith('{')) {
     const namedImports = importClause
-      .replace(/^{|}$/g, '') // Remove '{' and '}'
-      .split(',') // Split with commas
+      .replace(/^{|}$/g, '')
+      .split(',')
       .map(item => {
         const [original, alias] = item.split(/\s+as\s+/).map(s => s.trim());
         return alias ? `${original}: ${alias}` : original;
@@ -222,21 +197,15 @@ function convertImportToRequire(importClause: string, importPath: string): strin
     return `const { ${namedImports} } = require('${importPath}');`;
   }
 
-  // Namespace import: import * as fs from 'fs' → const fs = require('fs');
+  // Namespace import (ESM): import * as foo from 'module' → const foo = require('module');
   if (importClause.startsWith('*')) {
     const namespace = importClause.replace(/^\*\s+as\s+/, '');
     return `const ${namespace} = require('${importPath}');`;
   }
 
-  // Other cases (which usually don't come here)
   return `const ${importClause} = require('${importPath}');`;
 }
 
-/*
- * The bundleCode function takes the path to an entry file,
- * concatenates the require calls for external modules (externalImportSet), the inlined dependent code (bundleStack),
- * and the code from the entry file, and returns it as a single bundle code.
- */
 export async function JIT(filePath: string): Promise<any> {
   const absoluteFilePath = resolve(filePath);
   if (!absoluteFilePath.startsWith(projectRoot + '/')) {
@@ -250,33 +219,27 @@ export async function JIT(filePath: string): Promise<any> {
   const ext = extMatch[1];
   const code = transformer(source, ext);
 
-  // Reset stacks etc. for each call to bundleCode
   bundleStack.length = 0;
   externalImportSet.clear();
 
-  // Inline the code in the entry file
-  const mainCode = fullCodeGen(code, absoluteFilePath);
-
-  // Finally, return the require statement for the external module and the inlined code
   const exportsObj = {};
   const context = vm.createContext({
-    require, // Injecting Node.js require
-    console, // console..
-    process, // process..
+    require,
+    console,
+    process,
     URL,
     Buffer,
     module: {
       exports: exportsObj,
-    }, // Prepare an empty module object..
-    exports: exportsObj, // instead of module.exports..
-    __dirname, // required
-    __filename, // required
+    },
+    exports: exportsObj,
   });
-  // Set a reference to global
   context.global = context;
-  // Set a reference to globalThis
   context.globalThis = context;
+  context.__dirname = __dirname;
+  context.__filename = __filename;
 
+  const mainCode = fullCodeGen(code, absoluteFilePath);
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
   const script = new vm.Script(finalBundle);
   script.runInContext(context);
