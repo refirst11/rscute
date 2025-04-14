@@ -1,6 +1,6 @@
 # rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-SWC-blue)](https://swc.rs/)
 
-Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core) & [**VM**](https://nodejs.org/api/vm.html)
+Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core)
 
 ## Installation
 
