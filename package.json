@@ -1,14 +1,11 @@
 {
   "name": "rscute",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Rust Execute (rscute): Run TypeScript ESM & CJS files in VM with SWC",
   "keywords": [
     "cli",
     "runtime",
     "node",
-    "swc",
-    "rust",
-    "vm",
     "cjs",
     "commonjs",
     "esm",
@@ -31,7 +28,8 @@
     "types/"
   ],
   "scripts": {
-    "build": "rimraf dist types && npx tsc && node jit_shebang",
+    "build": "rimraf dist types && npx tsc && node shebang && pnpm minify",
+    "minify": "terser dist/jit.js -c -o dist/jit.js",
     "test": "node dist/jit.js test/test.tsx"
   },
   "dependencies": {
@@ -40,6 +38,7 @@
   "devDependencies": {
     "@types/node": "^22.13.17",
     "rimraf": "^6.0.1",
+    "terser": "^5.39.0",
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
