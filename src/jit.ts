@@ -129,7 +129,7 @@ function fullCodeGen(code: string, basePath: string): string {
     // Remove the lines of the import statements that have nothing between them side-effect imports
     .replace(/import\s+['"][^'"]+['"]\s*;?\s*$/gm, '')
     // Remove import lines for image files (svg, png, jpeg, jpg, gif, webp, vue, svelte)
-    .replace(/^\s*import\s+(?:.*?\s+from\s+)?['"][^'"]+\.(?:svg|png|jpeg|jpg|gif|webp|vue|svelte)['"]\s*;?\s*$/gm, '')
+    .replace(/^\s*import\s+(?:.*?\s+from\s+)?['"][^'"]+\.(?:svg|bmp|ico|gif|png|jpeg|jpg|webp|avif|astro|vue|svelte|css|scss)['"]\s*;?\s*$/gm, '')
     // dirname is shim__dirname
     .replace(/import\.meta\.dirname/g, '__shim_dirname')
     // filename is shim__filename
