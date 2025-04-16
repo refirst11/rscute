@@ -62,12 +62,16 @@ function resolveImportPath(importPath: string, tsConfig: LoadTSConfig) {
   return resolve(baseDir, importPath);
 }
 
-function transformer(source: string, ext: string) {
+const transformCache = new Map<string, string>();
+function transformer(source: string, ext: string, filePath: string) {
+  if (transformCache.has(filePath)) return transformCache.get(filePath)!;
+
   const isTsx = ext === '.tsx';
-  const isTS = ext === '.ts' || ext === '.mts' || ext === '.cts' || isTsx;
-  if (!isTS) return source;
+  const isTypeScript = ext === '.ts' || ext === '.mts' || ext === '.cts' || isTsx;
+  if (!isTypeScript) return source;
 
   const { code } = transformSync(source, {
+    sourceMaps: false,
     module: {
       type: 'es6',
     },
@@ -76,7 +80,7 @@ function transformer(source: string, ext: string) {
       target: 'es2022',
     },
   });
-
+  transformCache.set(filePath, code);
   return code;
 }
 
@@ -166,7 +170,7 @@ function fullCodeGen(code: string, basePath: string): string {
       }
 
       const dependencySource = readFileSync(resolvedPath, 'utf-8');
-      const code = transformer(dependencySource, ext);
+      const code = transformer(dependencySource, ext, resolvedPath);
       const bundledDependency = fullCodeGen(code, resolvedPath);
       bundleStack.push(bundledDependency);
 
@@ -217,7 +221,7 @@ export async function JIT(filePath: string): Promise<any> {
 
   const source = readFileSync(absoluteFilePath, 'utf-8');
   const ext = extMatch[1];
-  const code = transformer(source, ext);
+  const code = transformer(source, ext, absoluteFilePath);
 
   bundleStack.length = 0;
   externalImportSet.clear();
