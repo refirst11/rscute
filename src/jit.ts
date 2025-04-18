@@ -237,11 +237,11 @@ export async function JIT(filePath: string): Promise<any> {
       exports: exportsObj,
     },
     exports: exportsObj,
+    __dirname: dirname(absoluteFilePath),
+    __filename: absoluteFilePath,
   });
   context.global = context;
   context.globalThis = context;
-  context.__dirname = __dirname;
-  context.__filename = __filename;
 
   const mainCode = fullCodeGen(code, absoluteFilePath);
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
