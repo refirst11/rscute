@@ -28,8 +28,8 @@ await JIT(absolutePath);
 
 ## Concept
 
-Since rscute executes to **programmatic** and isolated **V8** instance run **in memory**.  
-Supported extensions are **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, .tsx**
+rscute runs on a **programmatically** controlled **V8 instance** running entirely in **memory**.  
+Supported extensions are: **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, and .tsx**.
 
 ## License
 
