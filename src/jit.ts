@@ -226,27 +226,12 @@ export async function JIT(filePath: string): Promise<any> {
   bundleStack.length = 0;
   externalImportSet.clear();
 
-  const exportsObj = {};
-  const context = vm.createContext({
-    require,
-    console,
-    process,
-    URL,
-    Buffer,
-    module: {
-      exports: exportsObj,
-    },
-    exports: exportsObj,
-    __dirname: dirname(absoluteFilePath),
-    __filename: absoluteFilePath,
-  });
-  context.global = context;
-  context.globalThis = context;
-
   const mainCode = fullCodeGen(code, absoluteFilePath);
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
-  const script = new vm.Script(finalBundle);
-  script.runInContext(context);
+  const exportsObj = {};
+  const scriptFunction = new Function('require', 'console', 'process', '__dirname', '__filename', 'module', 'exports', finalBundle);
+
+  scriptFunction(require, console, process, dirname(absoluteFilePath), absoluteFilePath, { exports: exportsObj }, exportsObj);
 }
 
 if (process.argv[2]) {
