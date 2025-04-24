@@ -1,4 +1,3 @@
-import vm from 'vm';
 import { transformSync } from '@swc/core';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, extname } from 'path';
@@ -65,18 +64,13 @@ function resolveImportPath(importPath: string, tsConfig: LoadTSConfig) {
 const transformCache = new Map<string, string>();
 function transformer(source: string, ext: string, filePath: string) {
   if (transformCache.has(filePath)) return transformCache.get(filePath)!;
-
-  const isTsx = ext === '.tsx';
-  const isTypeScript = ext === '.ts' || ext === '.mts' || ext === '.cts' || isTsx;
-  if (!isTypeScript) return source;
-
   const { code } = transformSync(source, {
     sourceMaps: false,
     module: {
       type: 'es6',
     },
     jsc: {
-      parser: { syntax: 'typescript', tsx: isTsx },
+      parser: { syntax: 'typescript', tsx: ext.endsWith('tsx') },
       target: 'es2022',
     },
   });
@@ -84,10 +78,7 @@ function transformer(source: string, ext: string, filePath: string) {
   return code;
 }
 
-const bundleStack: string[] = [];
-const externalImportSet: Set<string> = new Set();
-
-function fullCodeGen(code: string, basePath: string): string {
+function fullCodeGen(code: string, basePath: string, bundleStack: string[], externalImportSet: Set<string>): string {
   const tsConfig = loadTsConfig();
   let resolvedPath: string;
   let processedCode = code
@@ -171,7 +162,7 @@ function fullCodeGen(code: string, basePath: string): string {
 
       const dependencySource = readFileSync(resolvedPath, 'utf-8');
       const code = transformer(dependencySource, ext, resolvedPath);
-      const bundledDependency = fullCodeGen(code, resolvedPath);
+      const bundledDependency = fullCodeGen(code, resolvedPath, bundleStack, externalImportSet);
       bundleStack.push(bundledDependency);
 
       return '';
@@ -218,19 +209,18 @@ export async function JIT(filePath: string): Promise<any> {
 
   const extMatch = filePath.match(/(\.(?:js|ts|mjs|mts|cjs|cts|jsx|tsx))$/);
   if (!extMatch) throw new Error('Unsupported file extension');
+  const ext = extMatch[1];
 
   const source = readFileSync(absoluteFilePath, 'utf-8');
-  const ext = extMatch[1];
-  const code = transformer(source, ext, absoluteFilePath);
+  const transformedCode = ext === '.js' || ext === '.mjs' || ext === 'jsx' ? source : transformer(source, ext, absoluteFilePath);
 
-  bundleStack.length = 0;
-  externalImportSet.clear();
+  const bundleStack: string[] = [];
+  const externalImportSet: Set<string> = new Set();
+  const mainCode = fullCodeGen(transformedCode, absoluteFilePath, bundleStack, externalImportSet);
 
-  const mainCode = fullCodeGen(code, absoluteFilePath);
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
   const exportsObj = {};
   const scriptFunction = new Function('require', 'console', 'process', '__dirname', '__filename', 'module', 'exports', finalBundle);
-
   scriptFunction(require, console, process, dirname(absoluteFilePath), absoluteFilePath, { exports: exportsObj }, exportsObj);
 }
 
