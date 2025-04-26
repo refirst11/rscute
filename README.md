@@ -28,9 +28,7 @@ await execute(absolutePath);
 
 ## Concept
 
-rscute executes the code that did the **path** resolution in the **Function** constructor, which is done in **memory**.
-
-Supported extensions are **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, and .tsx**.
+rscute executes the code that did the **path** resolution in the **Function** constructor, which is done in **memory**. Supported extensions are **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, and .tsx**.
 
 ## License
 
