@@ -18,10 +18,10 @@
     "url": "git+https://github.com/refirst11/rscute.git"
   },
   "license": "MIT",
-  "main": "dist/jit.js",
-  "types": "types/jit.d.ts",
+  "main": "dist/execute.js",
+  "types": "types/execute.d.ts",
   "bin": {
-    "rscute": "./dist/jit.js"
+    "rscute": "./dist/execute.js"
   },
   "files": [
     "dist/",
@@ -29,8 +29,8 @@
   ],
   "scripts": {
     "build": "rimraf dist types && npx tsc && node shebang && pnpm minify",
-    "minify": "terser dist/jit.js -c -o dist/jit.js",
-    "test": "node dist/jit.js test/test.tsx"
+    "minify": "terser dist/execute.js -c -o dist/execute.js",
+    "test": "node dist/execute.js test/test.tsx"
   },
   "dependencies": {
     "@swc/core": "^1.11.22"

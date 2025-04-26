@@ -18,18 +18,19 @@ npx rscute script.ts
 
 ## Dynamic import
 
-`await import()` to replace `await JIT()`
+`await import()` to replace `await execute()`
 
 ```ts
-const { JIT } = require('rscute');
+import { execute } from 'rscute';
 
-await JIT(absolutePath);
+await execute(absolutePath);
 ```
 
 ## Concept
 
-rscute runs on a **programmatically** controlled **V8 instance** running entirely in **memory**.  
-Supported extensions are: **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, and .tsx**.
+rscute executes the code that did the **path** resolution in the **Function** constructor, which is done in **memory**.
+
+Supported extensions are **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, and .tsx**.
 
 ## License
 

@@ -203,7 +203,7 @@ function convertImportToRequire(importClause: string, importPath: string): strin
   return `const ${importClause} = require('${importPath}');`;
 }
 
-export async function JIT(filePath: string): Promise<any> {
+export async function execute(filePath: string): Promise<any> {
   const absoluteFilePath = resolve(filePath);
   if (!absoluteFilePath.startsWith(projectRoot + '/')) {
     throw new Error('Invalid path: must use absolute path within project:' + projectRoot);
@@ -227,7 +227,7 @@ export async function JIT(filePath: string): Promise<any> {
 }
 
 if (process.argv[2]) {
-  JIT(process.argv[2]).catch(err => {
+  execute(process.argv[2]).catch(err => {
     console.error(err);
     process.exit(1);
   });
