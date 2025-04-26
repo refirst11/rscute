@@ -109,9 +109,11 @@ function fullCodeGen(code: string, basePath: string, bundleStack: string[], exte
     // dirname is shim__dirname
     .replace(/import\.meta\.dirname/g, '__shim_dirname')
     // filename is shim__filename
-    .replace(/import\.meta\.filename/g, '__shim_filename');
+    .replace(/import\.meta\.filename/g, '__shim_filename')
+    // import.meta.url shim
+    .replace(/import\.meta\.url/g, 'pathToFileURL(__shim_filename).href');
 
-  const shim = `const __shim_dirname = __dirname;\nconst __shim_filename = __filename;\n`;
+  const shim = `const __shim_dirname = __dirname;\nconst __shim_filename = __filename;\nconst { pathToFileURL } = require('url');\n`;
 
   externalImportSet.add(shim);
 
