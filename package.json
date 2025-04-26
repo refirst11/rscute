@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Rust Execute (rscute): Run TypeScript ESM & CJS files in VM with SWC",
   "keywords": [
     "cli",
@@ -33,7 +33,7 @@
     "test": "node dist/jit.js test/test.tsx"
   },
   "dependencies": {
-    "@swc/core": "^1.11.16"
+    "@swc/core": "^1.11.22"
   },
   "devDependencies": {
     "@types/node": "^22.13.17",
