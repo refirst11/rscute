@@ -163,7 +163,7 @@ function fullCodeGen(code: string, basePath: string, bundleStack: string[], exte
       }
 
       const dependencySource = readFileSync(resolvedPath, 'utf-8');
-      const code = transformer(dependencySource, ext, resolvedPath);
+      const code = ext === '.js' || ext === '.mjs' || ext === '.jsx' ? dependencySource : transformer(dependencySource, ext, resolvedPath);
       const bundledDependency = fullCodeGen(code, resolvedPath, bundleStack, externalImportSet);
       bundleStack.push(bundledDependency);
 
@@ -214,11 +214,11 @@ export async function execute(filePath: string): Promise<any> {
   const ext = extMatch[1];
 
   const source = readFileSync(absoluteFilePath, 'utf-8');
-  const transformedCode = ext === '.js' || ext === '.mjs' || ext === 'jsx' ? source : transformer(source, ext, absoluteFilePath);
+  const code = ext === '.js' || ext === '.mjs' || ext === '.jsx' ? source : transformer(source, ext, absoluteFilePath);
 
   const bundleStack: string[] = [];
   const externalImportSet: Set<string> = new Set();
-  const mainCode = fullCodeGen(transformedCode, absoluteFilePath, bundleStack, externalImportSet);
+  const mainCode = fullCodeGen(code, absoluteFilePath, bundleStack, externalImportSet);
 
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
   const exportsObj = {};
