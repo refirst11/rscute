@@ -16,12 +16,18 @@ Run a TypeScript file **directly**:
 npx rscute script.ts
 ```
 
+Run on **node** is the **fastest-startup**:
+
+```sh
+node -r rscute script.ts
+```
+
 ## Dynamic import
 
 `await import()` to replace `await execute()`
 
 ```ts
-import { execute } from 'rscute';
+import { execute } from 'rscute/execute';
 
 await execute(absolutePath);
 ```
