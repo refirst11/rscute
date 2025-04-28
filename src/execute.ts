@@ -163,7 +163,7 @@ function fullCodeGen(code: string, basePath: string, bundleStack: string[], exte
       }
 
       const dependencySource = readFileSync(resolvedPath, 'utf-8');
-      const code = ext === '.js' || ext === '.mjs' || ext === '.jsx' ? dependencySource : transformer(dependencySource, ext, resolvedPath);
+      const code = ext === '.js' || ext === '.mjs' || ext === '.cjs' || ext === '.jsx' ? dependencySource : transformer(dependencySource, ext, resolvedPath);
       const bundledDependency = fullCodeGen(code, resolvedPath, bundleStack, externalImportSet);
       bundleStack.push(bundledDependency);
 
@@ -214,7 +214,7 @@ export async function execute(filePath: string): Promise<any> {
   const ext = extMatch[1];
 
   const source = readFileSync(absoluteFilePath, 'utf-8');
-  const code = ext === '.js' || ext === '.mjs' || ext === '.jsx' ? source : transformer(source, ext, absoluteFilePath);
+  const code = ext === '.js' || ext === '.mjs' || ext === '.cjs' || ext === '.jsx' ? source : transformer(source, ext, absoluteFilePath);
 
   const bundleStack: string[] = [];
   const externalImportSet: Set<string> = new Set();
@@ -224,11 +224,4 @@ export async function execute(filePath: string): Promise<any> {
   const exportsObj = {};
   const scriptFunction = new Function('require', 'console', 'process', '__dirname', '__filename', 'module', 'exports', finalBundle);
   scriptFunction(require, console, process, dirname(absoluteFilePath), absoluteFilePath, { exports: exportsObj }, exportsObj);
-}
-
-if (process.argv[2]) {
-  execute(process.argv[2]).catch(err => {
-    console.error(err);
-    process.exit(1);
-  });
 }
