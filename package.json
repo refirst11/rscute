@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Rust Execute (rscute): Run TypeScript (ESM・CJS) in memory with SWC",
   "keywords": [
     "cli",
@@ -18,25 +18,34 @@
     "url": "git+https://github.com/refirst11/rscute.git"
   },
   "license": "MIT",
-  "main": "dist/execute.js",
-  "types": "types/execute.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./execute": {
+      "import": "./dist/execute.js",
+      "require": "./dist/execute.js",
+      "types": "./types/execute.d.ts"
+    }
+  },
+  "main": "dist/index.js",
   "bin": {
-    "rscute": "./dist/execute.js"
+    "rscute": "./dist/cli.js"
   },
   "files": [
     "dist/",
     "types/"
   ],
   "scripts": {
-    "build": "rimraf dist types && npx tsc && node shebang && pnpm minify",
+    "build": "rimraf dist types && npx tsc && pnpm minify && pnpm minify && pnpm bundle",
     "minify": "terser dist/execute.js -c -o dist/execute.js",
-    "test": "node dist/execute.js test/test.tsx"
+    "bundle": "pnpm cpy 'bundle/**' 'dist'",
+    "test": "node dist/cli.js test/test.tsx"
   },
   "dependencies": {
     "@swc/core": "^1.11.22"
   },
   "devDependencies": {
     "@types/node": "^22.13.17",
+    "cpy-cli": "^5.0.0",
     "rimraf": "^6.0.1",
     "terser": "^5.39.0",
     "typescript": "^5.8.2"
