@@ -72,6 +72,11 @@ function transformer(source: string, ext: string, filePath: string) {
     jsc: {
       parser: { syntax: 'typescript', tsx: ext.endsWith('tsx') },
       target: 'es2022',
+      transform: {
+        react: {
+          runtime: 'automatic',
+        },
+      },
     },
   });
   transformCache.set(filePath, code);
