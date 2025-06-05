@@ -86,6 +86,8 @@ function transformer(source: string, ext: string, filePath: string) {
 function fullCodeGen(code: string, basePath: string, bundleStack: string[], externalImportSet: Set<string>): string {
   const tsConfig = loadTsConfig();
   let resolvedPath: string;
+  type ImportClause = { type: 'named'; name: string } | { type: 'default'; name: string } | { type: 'namespace'; name: string };
+  const externalImportMap: Map<string, Set<ImportClause>> = new Map();
   let processedCode = code
     // Replace await import(...) → require(...)
     .replace(/await\s+import\s*\(\s*(.*?)\s*\)/g, 'require($1)')
@@ -142,6 +144,30 @@ function fullCodeGen(code: string, basePath: string, bundleStack: string[], exte
         }
       }
 
+      // --- Aggregation processing starts here ---
+      if (!existsSync(resolvedPath)) {
+        const module = requirePath || importPath;
+        if (!externalImportMap.has(module)) {
+          externalImportMap.set(module, new Set());
+        }
+        const set = externalImportMap.get(module)!;
+
+        if (importClause && importClause.trim().startsWith('{')) {
+          importClause
+            .replace(/^{|}$/g, '')
+            .split(',')
+            .map((item: string) => item.trim())
+            .filter(Boolean)
+            .forEach((item: string) => set.add({ type: 'named', name: item }));
+        } else if (importClause && importClause.trim().startsWith('*')) {
+          set.add({ type: 'namespace', name: importClause.replace(/^\*\s+as\s+/, '').trim() });
+        } else if (importClause) {
+          set.add({ type: 'default', name: importClause.trim() });
+        }
+        return '';
+      }
+      // --- Aggregation processing ends here ---
+
       if (!existsSync(resolvedPath)) {
         const requireCase = `const ${requireClause} = require('${requirePath}');`;
         const requireStatement = importPath ? convertImportToRequire(importClause, importPath) : requireCase;
@@ -175,6 +201,32 @@ function fullCodeGen(code: string, basePath: string, bundleStack: string[], exte
       return '';
     }
   );
+
+  for (const [module, set] of externalImportMap.entries()) {
+    const named: string[] = [];
+    const defaults: string[] = [];
+    const namespaces: string[] = [];
+    for (const clause of set) {
+      if (clause.type === 'named') named.push(clause.name);
+      else if (clause.type === 'default') defaults.push(clause.name);
+      else if (clause.type === 'namespace') namespaces.push(clause.name);
+    }
+    // Make named unique and output require statements one by one
+    for (const name of [...new Set(named)]) {
+      const [original, alias] = name.split(/\s+as\s+/).map(s => s.trim());
+      if (alias) {
+        externalImportSet.add(`const { ${original}: ${alias} } = require('${module}');`);
+      } else {
+        externalImportSet.add(`const { ${original} } = require('${module}');`);
+      }
+    }
+    for (const name of [...new Set(defaults)]) {
+      externalImportSet.add(`const ${name} = require('${module}');`);
+    }
+    for (const name of [...new Set(namespaces)]) {
+      externalImportSet.add(`const ${name} = require('${module}');`);
+    }
+  }
 
   return processedCode;
 }
@@ -226,6 +278,11 @@ export async function execute(filePath: string): Promise<any> {
   const mainCode = fullCodeGen(code, absoluteFilePath, bundleStack, externalImportSet);
 
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
+
+  // const tempFileName = `${basename(filePath, extname(filePath))}${ext}-tmp.mjs`;
+  // const tempFilePath = join(dirname(absoluteFilePath), tempFileName);
+  // writeFileSync(tempFilePath, finalBundle);
+
   const exportsObj = {};
   const scriptFunction = new Function('require', 'console', 'process', '__dirname', '__filename', 'module', 'exports', finalBundle);
   scriptFunction(require, console, process, dirname(absoluteFilePath), absoluteFilePath, { exports: exportsObj }, exportsObj);
