@@ -45,11 +45,10 @@
     "rscute": "./dist/cli.js"
   },
   "files": [
-    "dist/",
-    "types/"
+    "dist/"
   ],
   "scripts": {
-    "build": "rimraf dist types && tsc && pnpm minify",
+    "build": "rimraf dist && tsc && pnpm minify",
     "minify": "terser dist/execute.js -c -o dist/execute.js",
     "bundle": "pnpm cpy 'bundle/**' 'dist'",
     "test": "node dist/cli.js test/test.tsx && pnpm cli && pnpm register",
