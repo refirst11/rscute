@@ -6,7 +6,7 @@ type RunOptions = {
   mode?: 'sequential' | 'parallel';
 };
 
-export async function run(files: string[], options: RunOptions = {}) {
+export async function run(files: string[] = [], options: RunOptions = {}) {
   const { mode = 'sequential' } = options;
 
   if (files.length === 0) {
