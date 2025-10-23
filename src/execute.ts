@@ -261,21 +261,16 @@ function convertImportToRequire(importClause: string, importPath: string): strin
 }
 
 export async function execute(filePath: string): Promise<any> {
-  const absoluteFilePath = resolve(filePath);
-  if (!absoluteFilePath.startsWith(projectRoot + '/')) {
-    throw new Error('Invalid path: must use absolute path within project:' + projectRoot);
-  }
-
   const extMatch = filePath.match(/(\.(?:js|ts|mjs|mts|cjs|cts|jsx|tsx))$/);
   if (!extMatch) throw new Error('Unsupported file extension');
   const ext = extMatch[1];
 
-  const source = readFileSync(absoluteFilePath, 'utf-8');
-  const code = ext === '.js' || ext === '.mjs' || ext === '.cjs' || ext === '.jsx' ? source : transformer(source, ext, absoluteFilePath);
+  const source = readFileSync(filePath, 'utf-8');
+  const code = ext === '.js' || ext === '.mjs' || ext === '.cjs' || ext === '.jsx' ? source : transformer(source, ext, filePath);
 
   const bundleStack: string[] = [];
   const externalImportSet: Set<string> = new Set();
-  const mainCode = fullCodeGen(code, absoluteFilePath, bundleStack, externalImportSet);
+  const mainCode = fullCodeGen(code, filePath, bundleStack, externalImportSet);
 
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
 
@@ -285,5 +280,5 @@ export async function execute(filePath: string): Promise<any> {
 
   const exportsObj = {};
   const scriptFunction = new Function('require', 'console', 'process', '__dirname', '__filename', 'module', 'exports', finalBundle);
-  scriptFunction(require, console, process, dirname(absoluteFilePath), absoluteFilePath, { exports: exportsObj }, exportsObj);
+  scriptFunction(require, console, process, dirname(filePath), filePath, { exports: exportsObj }, exportsObj);
 }
