@@ -1,17 +1,14 @@
 {
   "name": "rscute",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Rust Execute (rscute): Run TypeScript (ESM・CJS) in memory with SWC",
   "keywords": [
     "cli",
     "runtime",
     "node",
-    "npx",
-    "pnpm exec",
     "cjs",
     "commonjs",
     "esm",
-    "ecmascript",
     "typescript",
     "typescript runner"
   ],
