@@ -53,7 +53,7 @@
     "register": "node test/register-api-test.js"
   },
   "dependencies": {
-    "@swc/core": "1.13.5"
+    "@swc/core": "1.14.0"
   },
   "devDependencies": {
     "@types/node": "^22.18.8",
