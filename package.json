@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "0.2.12",
+  "version": "1.0.0",
   "description": "Rust Execute (rscute): Run TypeScript (ESM・CJS) in memory with SWC",
   "keywords": [
     "cli",
@@ -12,10 +12,13 @@
     "typescript",
     "typescript runner"
   ],
-  "author": "Refirst",
+  "author": "Refirst 11",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/refirst11/rscute.git"
+  },
+  "bugs": {
+    "url": "https://github.com/refirst11/rscute/issues"
   },
   "license": "MIT",
   "exports": {
@@ -53,7 +56,7 @@
     "register": "node test/register-api-test.js"
   },
   "dependencies": {
-    "@swc/core": "1.14.0"
+    "@swc/core": "1.15.0"
   },
   "devDependencies": {
     "@types/node": "^22.18.8",
