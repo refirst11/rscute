@@ -1,4 +1,4 @@
-import { transformSync } from '@swc/core';
+import { transformSync, parse, print, CallExpression, Identifier } from '@swc/core';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, extname } from 'path';
 import { cwd } from 'process';
@@ -76,6 +76,15 @@ function transformer(source: string, ext: string, filePath: string) {
         react: {
           runtime: 'automatic',
         },
+        optimizer: {
+          globals: {
+            vars: {
+              'import.meta.dirname': '__shim_dirname',
+              'import.meta.filename': '__shim_filename',
+              'import.meta.url': 'pathToFileURL(__shim_filename).href',
+            },
+          },
+        },
       },
     },
   });
@@ -83,200 +92,310 @@ function transformer(source: string, ext: string, filePath: string) {
   return code;
 }
 
-function fullCodeGen(code: string, basePath: string, bundleStack: string[], externalImportSet: Set<string>): string {
+async function fullCodeGen(
+  code: string,
+  basePath: string,
+  bundleStack: string[],
+  externalImportSet: Set<string>,
+  processedFiles: Set<string> = new Set()
+): Promise<void> {
+  if (processedFiles.has(basePath)) {
+    return;
+  }
+  processedFiles.add(basePath);
+
   const tsConfig = loadTsConfig();
-  let resolvedPath: string;
-  type ImportClause = { type: 'named'; name: string } | { type: 'default'; name: string } | { type: 'namespace'; name: string };
+  type ImportClause = { type: 'named'; original: string; alias: string | null } | { type: 'default'; name: string } | { type: 'namespace'; name: string };
   const externalImportMap: Map<string, Set<ImportClause>> = new Map();
-  let processedCode = code
-    // Replace await import(...) → require(...)
-    .replace(/await\s+import\s*\(\s*(.*?)\s*\)/g, 'require($1)')
-    // Convert (module.?)exports = function  → function
-    .replace(/(?:module\.)?exports\s*=\s*((async\s+)?function\s+\w+\s*\(.*?\)\s*\{[\s\S]*?\});?/gm, '$1')
-    // Convert (module.?)exports = class → class
-    .replace(/(?:module\.)?exports\s*=\s*(class\s+\w+\s*\{[\s\S]*?\});?/gm, '$1')
-    // Convert (module.?)exports.XXX = function → function
-    .replace(/(?:module\.)?exports\.\w+\s*=\s*((async\s+)?function\s+\w+\s*\(.*?\)\s*\{[\s\S]*?\});?/gm, '$1')
-    // Convert (module.?)exports.XXX = class → class
-    .replace(/(?:module\.)?exports\.\w+\s*=\s*(class\s+\w+\s*\{[\s\S]*?\});?/gm, '$1')
-    // Remove all other module.export lines
-    .replace(/(?:module\.)?exports\s*=\s*[^\n;]+;?\s*$/gm, '')
-    // Convert export default function to function
-    .replace(/export\s+default\s+(function\s+.*?);?\s*$/gm, '$1')
-    // Convert export default class to class
-    .replace(/export\s+default\s+(class\s+.*?);?\s*$/gm, '$1')
-    // Remove all other export default lines
-    .replace(/export\s+default\s+.*?;?\s*$/gm, '')
-    // Remove only the export
-    .replace(/export\s+(?!default)(.*)/g, '$1')
-    // Remove the lines of the import statements that have nothing between them side-effect imports
-    .replace(/import\s+['"][^'"]+['"]\s*;?\s*$/gm, '')
-    // Remove import lines for image files (svg, png, jpeg, jpg, gif, webp, vue, svelte)
-    .replace(/^\s*import\s+(?:.*?\s+from\s+)?['"][^'"]+\.(?:svg|bmp|ico|gif|png|jpeg|jpg|webp|avif|astro|vue|svelte|css|scss)['"]\s*;?\s*$/gm, '')
-    // dirname is shim__dirname
-    .replace(/import\.meta\.dirname/g, '__shim_dirname')
-    // filename is shim__filename
-    .replace(/import\.meta\.filename/g, '__shim_filename')
-    // import.meta.url shim
-    .replace(/import\.meta\.url/g, 'pathToFileURL(__shim_filename).href');
 
   const shim = `const __shim_dirname = __dirname;\nconst __shim_filename = __filename;\nconst { pathToFileURL } = require('url');\n`;
-
   externalImportSet.add(shim);
 
-  processedCode = processedCode.replace(
-    /(?:import\s+(.*?)\s+from\s+['"]([^'"]+)['"]|(?:const|let|var)\s*({[^}]+}|[\w$_]+)\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\))\s*;?/g,
-    (_match, importClause, importPath, requireClause, requirePath) => {
-      const paths = importPath || requirePath;
+  const ext = extname(basePath);
+  const isTs = ext.includes('ts');
+  const ast = await parse(code, { syntax: isTs ? 'typescript' : 'ecmascript', tsx: ext.endsWith('tsx') });
 
-      if (!paths.startsWith('.')) {
-        resolvedPath = resolveImportPath(paths, tsConfig);
-      } else {
-        resolvedPath = resolve(dirname(basePath), paths);
-      }
-
-      if (!extname(resolvedPath)) {
-        for (const ext of extensions) {
-          if (existsSync(resolvedPath + ext)) {
-            resolvedPath += ext;
-            break;
+  async function visit(node: any): Promise<any> {
+    if (!node) return node;
+    if (Array.isArray(node)) {
+      const newArray = [];
+      for (const item of node) {
+        const result = await visit(item);
+        if (result) {
+          if (Array.isArray(result)) {
+            newArray.push(...result);
+          } else {
+            newArray.push(result);
           }
         }
       }
+      return newArray;
+    }
 
-      // --- Aggregation processing starts here ---
-      if (!existsSync(resolvedPath)) {
-        const module = requirePath || importPath;
-        if (!externalImportMap.has(module)) {
-          externalImportMap.set(module, new Set());
+    if (typeof node === 'object') {
+      const transformedNode = await transformNode(node);
+      if (!transformedNode) return null;
+
+      const newNode: { [key: string]: any } = {};
+      for (const key in transformedNode) {
+        newNode[key] = await visit(transformedNode[key]);
+      }
+      return newNode;
+    }
+
+    return node;
+  }
+
+  async function transformNode(node: any): Promise<any> {
+    switch (node.type) {
+      case 'ImportDeclaration': {
+        const importPath = node.source.value;
+        const excludedExtensions = ['.svg', '.bmp', '.ico', '.gif', '.png', '.jpeg', '.jpg', '.webp', '.avif', '.astro', '.vue', '.svelte', '.css', '.scss'];
+        if (excludedExtensions.includes(extname(importPath))) {
+          return null;
         }
-        const set = externalImportMap.get(module)!;
 
-        if (importClause && importClause.trim().startsWith('{')) {
-          importClause
-            .replace(/^{|}$/g, '')
-            .split(',')
-            .map((item: string) => item.trim())
-            .filter(Boolean)
-            .forEach((item: string) => set.add({ type: 'named', name: item }));
-        } else if (importClause && importClause.trim().startsWith('*')) {
-          set.add({ type: 'namespace', name: importClause.replace(/^\*\s+as\s+/, '').trim() });
-        } else if (importClause) {
-          set.add({ type: 'default', name: importClause.trim() });
+        let resolvedPath = importPath.startsWith('.') ? resolve(dirname(basePath), importPath) : resolveImportPath(importPath, tsConfig);
+        if (!extname(resolvedPath)) {
+          for (const ext of extensions) {
+            if (existsSync(resolvedPath + ext)) {
+              resolvedPath += ext;
+              break;
+            }
+          }
         }
-        return '';
+
+        if (!existsSync(resolvedPath)) {
+          if (!externalImportMap.has(importPath)) externalImportMap.set(importPath, new Set());
+          const set = externalImportMap.get(importPath)!;
+          for (const specifier of node.specifiers) {
+            if (specifier.type === 'ImportDefaultSpecifier') set.add({ type: 'default', name: specifier.local.value });
+            else if (specifier.type === 'ImportNamespaceSpecifier') set.add({ type: 'namespace', name: specifier.local.value });
+            else if (specifier.type === 'ImportSpecifier') {
+              if (specifier.imported) {
+                set.add({ type: 'named', original: specifier.imported.value, alias: specifier.local.value });
+              } else {
+                set.add({ type: 'named', original: specifier.local.value, alias: null });
+              }
+            }
+          }
+        } else {
+          // Internal module processing
+          const dependencySource = readFileSync(resolvedPath, 'utf-8');
+          const depExt = extname(resolvedPath);
+          const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
+          const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
+          await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
+
+          // Generate variable declarations to resolve aliases and default named imports
+          const declarations: string[] = [];
+          for (const specifier of node.specifiers) {
+            if (specifier.type === 'ImportDefaultSpecifier') {
+              // import DefaultName from './module' // default import handled
+              // Guess the default variable name from the module name
+              const moduleName = importPath.split('/').pop()?.split('.').shift() ?? '';
+              if (moduleName && specifier.local.value !== moduleName) {
+                declarations.push(`const ${specifier.local.value} = ${moduleName};`);
+              }
+            } else if (specifier.type === 'ImportSpecifier') {
+              // import { original as alias } from './module' // named import handled
+              if (specifier.imported && specifier.local.value !== specifier.imported.value) {
+                declarations.push(`const ${specifier.local.value} = ${specifier.imported.value};`);
+              }
+            } else if (specifier.type === 'ImportNamespaceSpecifier') {
+              // import * as x from './module' // internal module handled
+              declarations.push(`const ${specifier.local.value} = require('${resolvedPath}');`);
+            }
+          }
+          if (declarations.length > 0) {
+            bundleStack.push(declarations.join('\n'));
+          }
+        }
+        return null;
       }
-      // --- Aggregation processing ends here ---
+      case 'VariableDeclaration': {
+        const declaration = node.declarations[0];
+        if (declaration?.init?.type === 'CallExpression' && (declaration.init.callee as Identifier).value === 'require') {
+          const requirePath = (declaration.init.arguments[0].expression as Identifier).value;
+          let resolvedPath = requirePath.startsWith('.') ? resolve(dirname(basePath), requirePath) : resolveImportPath(requirePath, tsConfig);
+          if (!extname(resolvedPath)) {
+            for (const ext of extensions) {
+              if (existsSync(resolvedPath + ext)) {
+                resolvedPath += ext;
+                break;
+              }
+            }
+          }
 
-      if (!existsSync(resolvedPath)) {
-        const requireCase = `const ${requireClause} = require('${requirePath}');`;
-        const requireStatement = importPath ? convertImportToRequire(importClause, importPath) : requireCase;
-        externalImportSet.add(requireStatement);
-        return '';
+          if (!existsSync(resolvedPath)) {
+            if (declaration.id.type === 'Identifier') {
+              externalImportSet.add(`const ${declaration.id.value} = require('${requirePath}');`);
+            } else if (declaration.id.type === 'ObjectPattern') {
+              const properties = declaration.id.properties
+                .map((prop: any) => {
+                  if (prop.type === 'AssignmentPatternProperty') {
+                    return prop.key.value;
+                  } else if (prop.type === 'KeyValuePatternProperty') {
+                    return `${prop.key.value}: ${prop.value.value}`;
+                  }
+                  return '';
+                })
+                .filter(Boolean)
+                .join(', ');
+              externalImportSet.add(`const { ${properties} } = require('${requirePath}');`);
+            }
+          } else {
+            const dependencySource = readFileSync(resolvedPath, 'utf-8');
+            const depExt = extname(resolvedPath);
+            const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
+            const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
+            await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
+          }
+          return null;
+        }
+        break;
       }
-      const ext = extname(resolvedPath);
-
-      if (ext === '.tsx' || ext === '.jsx') {
-        // The dependent React Component does not expand or call the code.
-        // This is because you cannot expand tsx components within js, but it is important not to open the scope of tsx itself.
-        // This is because the scope of tsx is opened and the side effects are executed.
-        // The side effects of tsx are executed directly through JIT().
-        /*
-        React JSX is scoped and treated as a `component` which acts as a DOM and confines side effects, so expanding JSX side effects into code is the same as opening the scope.
-        In other words, rscute can process the side effects of tsx, but cannot treat it as a component.
-        If you want to call tsx from tsx as a side effect, you can call it as ts and expand it into code as a dependency.
-        */
-        return '';
+      case 'ExportDeclaration':
+        return node.declaration;
+      case 'ExportDefaultExpression': {
+        return { type: 'ExpressionStatement', expression: node.expression, span: node.span };
       }
-
-      if (!existsSync(resolvedPath)) {
-        throw new Error(`Cannot resolve import ${importPath} at ${resolvedPath}`);
+      case 'ExportDefaultDeclaration': {
+        return node.decl;
       }
+      case 'ExportAllDeclaration': {
+        const exportPath = node.source.value;
+        let resolvedPath = exportPath.startsWith('.') ? resolve(dirname(basePath), exportPath) : resolveImportPath(exportPath, tsConfig);
+        if (!extname(resolvedPath)) {
+          for (const ext of extensions) {
+            if (existsSync(resolvedPath + ext)) {
+              resolvedPath += ext;
+              break;
+            }
+          }
+        }
 
-      const dependencySource = readFileSync(resolvedPath, 'utf-8');
-      const code = ext === '.js' || ext === '.mjs' || ext === '.cjs' || ext === '.jsx' ? dependencySource : transformer(dependencySource, ext, resolvedPath);
-      const bundledDependency = fullCodeGen(code, resolvedPath, bundleStack, externalImportSet);
-      bundleStack.push(bundledDependency);
-
-      return '';
+        if (existsSync(resolvedPath)) {
+          const dependencySource = readFileSync(resolvedPath, 'utf-8');
+          const depExt = extname(resolvedPath);
+          const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
+          const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
+          await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
+        }
+        return null;
+      }
+      case 'TsExportAssignment':
+        return {
+          type: 'ExpressionStatement',
+          expression: {
+            type: 'AssignmentExpression',
+            operator: '=',
+            left: {
+              type: 'MemberExpression',
+              object: { type: 'Identifier', value: 'module', span: node.span },
+              property: { type: 'Identifier', value: 'exports', span: node.span },
+              span: node.span,
+            },
+            right: node.expression,
+            span: node.span,
+          },
+          span: node.span,
+        };
+      case 'TsNamespaceExportDeclaration':
+        return null;
+      case 'ExpressionStatement': {
+        if (node.expression.type === 'AssignmentExpression') {
+          const { left, right } = node.expression;
+          if (left.type === 'MemberExpression' && (left.object as Identifier).value === 'module' && (left.property as Identifier).value === 'exports') {
+            if (right.type.endsWith('Declaration')) {
+              return right;
+            }
+            return { type: 'ExpressionStatement', expression: right, span: node.span };
+          } else if (left.type === 'MemberExpression' && (left.object as Identifier).value === 'exports') {
+            if (right.type === 'FunctionExpression' && right.identifier) {
+              return {
+                type: 'FunctionDeclaration',
+                identifier: right.identifier,
+                params: right.params,
+                body: right.body,
+                async: right.async,
+                generator: right.generator,
+                span: node.span,
+                ctxt: right.ctxt,
+              };
+            }
+          }
+        }
+        break;
+      }
+      case 'CallExpression': {
+        if (node.callee.type === 'Import') {
+          return { ...node, callee: { type: 'Identifier', value: 'require', span: node.callee.span } } as CallExpression;
+        }
+        break;
+      }
+      default:
     }
-  );
+    return node;
+  }
 
-  for (const [module, set] of externalImportMap.entries()) {
-    const named: string[] = [];
-    const defaults: string[] = [];
-    const namespaces: string[] = [];
-    for (const clause of set) {
-      if (clause.type === 'named') named.push(clause.name);
-      else if (clause.type === 'default') defaults.push(clause.name);
-      else if (clause.type === 'namespace') namespaces.push(clause.name);
-    }
-    // Make named unique and output require statements one by one
-    for (const name of [...new Set(named)]) {
-      const [original, alias] = name.split(/\s+as\s+/).map(s => s.trim());
-      if (alias) {
-        externalImportSet.add(`const { ${original}: ${alias} } = require('${module}');`);
-      } else {
-        externalImportSet.add(`const { ${original} } = require('${module}');`);
+  const transformedAst = await visit(ast);
+
+  for (const [module, clauses] of externalImportMap.entries()) {
+    const namedImportParts: string[] = [];
+    const defaultImports: string[] = [];
+    const namespaceImports: string[] = [];
+
+    for (const clause of clauses) {
+      if (clause.type === 'named') {
+        if (clause.alias && clause.original !== clause.alias) {
+          namedImportParts.push(`${clause.original}: ${clause.alias}`);
+        } else {
+          namedImportParts.push(clause.original);
+        }
+      } else if (clause.type === 'default') {
+        defaultImports.push(clause.name);
+      } else if (clause.type === 'namespace') {
+        namespaceImports.push(clause.name);
       }
     }
-    for (const name of [...new Set(defaults)]) {
-      externalImportSet.add(`const ${name} = require('${module}');`);
+
+    if (namedImportParts.length > 0) {
+      const uniqueParts = [...new Set(namedImportParts)];
+      externalImportSet.add(`const { ${uniqueParts.join(', ')} } = require('${module}');`);
     }
-    for (const name of [...new Set(namespaces)]) {
-      externalImportSet.add(`const ${name} = require('${module}');`);
+
+    if (defaultImports.length > 0) {
+      for (const name of [...new Set(defaultImports)]) {
+        externalImportSet.add(`const ${name} = require('${module}');`);
+      }
+    }
+
+    if (namespaceImports.length > 0) {
+      for (const name of [...new Set(namespaceImports)]) {
+        externalImportSet.add(`const ${name} = require('${module}');`);
+      }
     }
   }
 
-  return processedCode;
-}
-
-function convertImportToRequire(importClause: string, importPath: string): string {
-  if (!importClause.startsWith('{') && !importClause.startsWith('*')) {
-    // Default import: import foo from 'module' → const foo = require('module');
-    return `const ${importClause} = require('${importPath}');`;
-  }
-
-  // Named imports: import { foo as bar, baz } from 'module' → const { foo: bar, baz } = require('module');
-  if (importClause.startsWith('{')) {
-    const namedImports = importClause
-      .replace(/^{|}$/g, '')
-      .split(',')
-      .map(item => {
-        const [original, alias] = item.split(/\s+as\s+/).map(s => s.trim());
-        return alias ? `${original}: ${alias}` : original;
-      })
-      .join(', ');
-
-    return `const { ${namedImports} } = require('${importPath}');`;
-  }
-
-  // Namespace import (ESM): import * as foo from 'module' → const foo = require('module');
-  if (importClause.startsWith('*')) {
-    const namespace = importClause.replace(/^\*\s+as\s+/, '');
-    return `const ${namespace} = require('${importPath}');`;
-  }
-
-  return `const ${importClause} = require('${importPath}');`;
+  const { code: processedCode } = await print(transformedAst);
+  bundleStack.push(processedCode);
 }
 
 export async function execute(filePath: string): Promise<any> {
-  const extMatch = filePath.match(/(\.(?:js|ts|mjs|mts|cjs|cts|jsx|tsx))$/);
-  if (!extMatch) throw new Error('Unsupported file extension');
-  const ext = extMatch[1];
+  const ext = extname(filePath);
+  if (!extensions.includes(ext)) throw new Error('Unsupported file extension');
 
   const source = readFileSync(filePath, 'utf-8');
-  const code = ext === '.js' || ext === '.mjs' || ext === '.cjs' || ext === '.jsx' ? source : transformer(source, ext, filePath);
+  const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
+  const code = jsExtensions.includes(ext) ? source : transformer(source, ext, filePath);
 
   const bundleStack: string[] = [];
   const externalImportSet: Set<string> = new Set();
-  const mainCode = fullCodeGen(code, filePath, bundleStack, externalImportSet);
+  const processedFiles: Set<string> = new Set();
+  await fullCodeGen(code, filePath, bundleStack, externalImportSet, processedFiles);
 
-  const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n') + '\n' + mainCode.trim();
-
-  // const tempFileName = `${basename(filePath, extname(filePath))}${ext}-tmp.mjs`;
-  // const tempFilePath = join(dirname(absoluteFilePath), tempFileName);
-  // writeFileSync(tempFilePath, finalBundle);
+  const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n');
 
   const exportsObj = {};
   const scriptFunction = new Function('require', 'console', 'process', '__dirname', '__filename', 'module', 'exports', finalBundle);
