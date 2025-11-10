@@ -24,6 +24,7 @@ import { cwd } from 'process';
 
 type LoadTSConfig = null | { paths: Record<string, string[]>; baseUrl: string };
 const extensions = ['.js', '.ts', '.mjs', '.mts', '.cjs', '.cts', '.jsx', '.tsx'];
+const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
 
 function findProjectRoot() {
   let currentDir = cwd();
@@ -134,7 +135,7 @@ async function fullCodeGen(
   const isTs = ext.includes('ts');
   const ast = await parse(code, { syntax: isTs ? 'typescript' : 'ecmascript', tsx: ext.endsWith('tsx') });
 
-  async function visit(node: Node): Promise<Program | Node | Node[] | null> {
+  async function visit(node: Node): Promise<Node | Node[] | null> {
     if (!node) return node;
 
     if (Array.isArray(node)) {
@@ -248,7 +249,6 @@ async function fullCodeGen(
           // Internal module processing
           const dependencySource = readFileSync(resolvedPath, 'utf-8');
           const depExt = extname(resolvedPath);
-          const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
           const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
           await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
 
@@ -328,11 +328,7 @@ async function fullCodeGen(
             }
           } else {
             const dependencySource = readFileSync(resolvedPath, 'utf-8');
-
             const depExt = extname(resolvedPath);
-
-            const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
-
             const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
 
             await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
@@ -372,11 +368,7 @@ async function fullCodeGen(
 
         if (existsSync(resolvedPath)) {
           const dependencySource = readFileSync(resolvedPath, 'utf-8');
-
           const depExt = extname(resolvedPath);
-
-          const jsExtensions = ['.js', '.mjs', 'cjs', '.jsx'];
-
           const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
 
           await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
@@ -498,7 +490,7 @@ export async function execute(filePath: string): Promise<void> {
   if (!extensions.includes(ext)) throw new Error('Unsupported file extension');
 
   const source = readFileSync(filePath, 'utf-8');
-  const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
+
   const code = jsExtensions.includes(ext) ? source : transformer(source, ext, filePath);
 
   const bundleStack: string[] = [];
