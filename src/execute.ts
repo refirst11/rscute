@@ -1,4 +1,23 @@
-import { transformSync, parse, print, CallExpression, Identifier } from '@swc/core';
+import {
+  transformSync,
+  parse,
+  print,
+  CallExpression,
+  Identifier,
+  Node,
+  ImportDeclaration,
+  VariableDeclaration,
+  ExportDeclaration,
+  ExportDefaultExpression,
+  ExportDefaultDeclaration,
+  ExportAllDeclaration,
+  TsExportAssignment,
+  TsNamespaceExportDeclaration,
+  ExpressionStatement,
+  Program,
+  ObjectPatternProperty,
+  FunctionDeclaration,
+} from '@swc/core';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, extname } from 'path';
 import { cwd } from 'process';
@@ -115,12 +134,15 @@ async function fullCodeGen(
   const isTs = ext.includes('ts');
   const ast = await parse(code, { syntax: isTs ? 'typescript' : 'ecmascript', tsx: ext.endsWith('tsx') });
 
-  async function visit(node: any): Promise<any> {
+  async function visit(node: Node): Promise<Program | Node | Node[] | null> {
     if (!node) return node;
+
     if (Array.isArray(node)) {
-      const newArray = [];
+      const newArray: Node[] = [];
+
       for (const item of node) {
         const result = await visit(item);
+
         if (result) {
           if (Array.isArray(result)) {
             newArray.push(...result);
@@ -129,24 +151,63 @@ async function fullCodeGen(
           }
         }
       }
+
       return newArray;
     }
 
-    if (typeof node === 'object') {
+    if (typeof node === 'object' && 'type' in node) {
       const transformedNode = await transformNode(node);
+
       if (!transformedNode) return null;
 
       const newNode: { [key: string]: any } = {};
+
       for (const key in transformedNode) {
-        newNode[key] = await visit(transformedNode[key]);
+        if (Object.prototype.hasOwnProperty.call(transformedNode, key)) {
+          newNode[key] = await visit((transformedNode as any)[key] as Node);
+        }
       }
-      return newNode;
+
+      return newNode as Node;
     }
 
     return node;
   }
 
-  async function transformNode(node: any): Promise<any> {
+  type HandledNode =
+    | ImportDeclaration
+    | VariableDeclaration
+    | ExportDeclaration
+    | ExportDefaultExpression
+    | ExportDefaultDeclaration
+    | ExportAllDeclaration
+    | TsExportAssignment
+    | TsNamespaceExportDeclaration
+    | ExpressionStatement
+    | CallExpression;
+
+  const handledNodeTypes = new Set([
+    'ImportDeclaration',
+    'VariableDeclaration',
+    'ExportDeclaration',
+    'ExportDefaultExpression',
+    'ExportDefaultDeclaration',
+    'ExportAllDeclaration',
+    'TsExportAssignment',
+    'TsNamespaceExportDeclaration',
+    'ExpressionStatement',
+    'CallExpression',
+  ]);
+
+  function isHandledNode(node: Node): node is HandledNode {
+    return handledNodeTypes.has(node.type);
+  }
+
+  async function transformNode(node: Node): Promise<Node | null> {
+    if (!isHandledNode(node)) {
+      return node;
+    }
+
     switch (node.type) {
       case 'ImportDeclaration': {
         const importPath = node.source.value;
@@ -156,10 +217,12 @@ async function fullCodeGen(
         }
 
         let resolvedPath = importPath.startsWith('.') ? resolve(dirname(basePath), importPath) : resolveImportPath(importPath, tsConfig);
+
         if (!extname(resolvedPath)) {
           for (const ext of extensions) {
             if (existsSync(resolvedPath + ext)) {
               resolvedPath += ext;
+
               break;
             }
           }
@@ -167,7 +230,9 @@ async function fullCodeGen(
 
         if (!existsSync(resolvedPath)) {
           if (!externalImportMap.has(importPath)) externalImportMap.set(importPath, new Set());
+
           const set = externalImportMap.get(importPath)!;
+
           for (const specifier of node.specifiers) {
             if (specifier.type === 'ImportDefaultSpecifier') set.add({ type: 'default', name: specifier.local.value });
             else if (specifier.type === 'ImportNamespaceSpecifier') set.add({ type: 'namespace', name: specifier.local.value });
@@ -192,36 +257,48 @@ async function fullCodeGen(
           for (const specifier of node.specifiers) {
             if (specifier.type === 'ImportDefaultSpecifier') {
               // import DefaultName from './module' // default import handled
+
               // Guess the default variable name from the module name
+
               const moduleName = importPath.split('/').pop()?.split('.').shift() ?? '';
+
               if (moduleName && specifier.local.value !== moduleName) {
                 declarations.push(`const ${specifier.local.value} = ${moduleName};`);
               }
             } else if (specifier.type === 'ImportSpecifier') {
               // import { original as alias } from './module' // named import handled
+
               if (specifier.imported && specifier.local.value !== specifier.imported.value) {
                 declarations.push(`const ${specifier.local.value} = ${specifier.imported.value};`);
               }
             } else if (specifier.type === 'ImportNamespaceSpecifier') {
               // import * as x from './module' // internal module handled
+
               declarations.push(`const ${specifier.local.value} = require('${resolvedPath}');`);
             }
           }
+
           if (declarations.length > 0) {
             bundleStack.push(declarations.join('\n'));
           }
         }
+
         return null;
       }
+
       case 'VariableDeclaration': {
         const declaration = node.declarations[0];
+
         if (declaration?.init?.type === 'CallExpression' && (declaration.init.callee as Identifier).value === 'require') {
           const requirePath = (declaration.init.arguments[0].expression as Identifier).value;
+
           let resolvedPath = requirePath.startsWith('.') ? resolve(dirname(basePath), requirePath) : resolveImportPath(requirePath, tsConfig);
+
           if (!extname(resolvedPath)) {
             for (const ext of extensions) {
               if (existsSync(resolvedPath + ext)) {
                 resolvedPath += ext;
+
                 break;
               }
             }
@@ -232,44 +309,62 @@ async function fullCodeGen(
               externalImportSet.add(`const ${declaration.id.value} = require('${requirePath}');`);
             } else if (declaration.id.type === 'ObjectPattern') {
               const properties = declaration.id.properties
-                .map((prop: any) => {
+
+                .map((prop: ObjectPatternProperty) => {
                   if (prop.type === 'AssignmentPatternProperty') {
-                    return prop.key.value;
+                    return (prop.key as Identifier).value;
                   } else if (prop.type === 'KeyValuePatternProperty') {
-                    return `${prop.key.value}: ${prop.value.value}`;
+                    return `${(prop.key as Identifier).value}: ${(prop.value as Identifier).value}`;
                   }
+
                   return '';
                 })
+
                 .filter(Boolean)
+
                 .join(', ');
+
               externalImportSet.add(`const { ${properties} } = require('${requirePath}');`);
             }
           } else {
             const dependencySource = readFileSync(resolvedPath, 'utf-8');
+
             const depExt = extname(resolvedPath);
+
             const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
+
             const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
+
             await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
           }
+
           return null;
         }
+
         break;
       }
+
       case 'ExportDeclaration':
         return node.declaration;
+
       case 'ExportDefaultExpression': {
-        return { type: 'ExpressionStatement', expression: node.expression, span: node.span };
+        return { type: 'ExpressionStatement', expression: node.expression, span: node.span } as ExpressionStatement;
       }
+
       case 'ExportDefaultDeclaration': {
         return node.decl;
       }
+
       case 'ExportAllDeclaration': {
         const exportPath = node.source.value;
+
         let resolvedPath = exportPath.startsWith('.') ? resolve(dirname(basePath), exportPath) : resolveImportPath(exportPath, tsConfig);
+
         if (!extname(resolvedPath)) {
           for (const ext of extensions) {
             if (existsSync(resolvedPath + ext)) {
               resolvedPath += ext;
+
               break;
             }
           }
@@ -277,13 +372,19 @@ async function fullCodeGen(
 
         if (existsSync(resolvedPath)) {
           const dependencySource = readFileSync(resolvedPath, 'utf-8');
+
           const depExt = extname(resolvedPath);
-          const jsExtensions = ['.js', '.mjs', '.cjs', '.jsx'];
+
+          const jsExtensions = ['.js', '.mjs', 'cjs', '.jsx'];
+
           const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
+
           await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
         }
+
         return null;
       }
+
       case 'TsExportAssignment':
         return {
           type: 'ExpressionStatement',
@@ -300,17 +401,21 @@ async function fullCodeGen(
             span: node.span,
           },
           span: node.span,
-        };
+        } as ExpressionStatement;
+
       case 'TsNamespaceExportDeclaration':
         return null;
+
       case 'ExpressionStatement': {
         if (node.expression.type === 'AssignmentExpression') {
           const { left, right } = node.expression;
+
           if (left.type === 'MemberExpression' && (left.object as Identifier).value === 'module' && (left.property as Identifier).value === 'exports') {
             if (right.type.endsWith('Declaration')) {
               return right;
             }
-            return { type: 'ExpressionStatement', expression: right, span: node.span };
+
+            return { type: 'ExpressionStatement', expression: right, span: node.span } as ExpressionStatement;
           } else if (left.type === 'MemberExpression' && (left.object as Identifier).value === 'exports') {
             if (right.type === 'FunctionExpression' && right.identifier) {
               return {
@@ -321,21 +426,27 @@ async function fullCodeGen(
                 async: right.async,
                 generator: right.generator,
                 span: node.span,
-                ctxt: right.ctxt,
-              };
+                declare: false,
+                ctxt: 0,
+              } as FunctionDeclaration;
             }
           }
         }
+
         break;
       }
+
       case 'CallExpression': {
         if (node.callee.type === 'Import') {
           return { ...node, callee: { type: 'Identifier', value: 'require', span: node.callee.span } } as CallExpression;
         }
+
         break;
       }
+
       default:
     }
+
     return node;
   }
 
@@ -378,11 +489,11 @@ async function fullCodeGen(
     }
   }
 
-  const { code: processedCode } = await print(transformedAst);
+  const { code: processedCode } = await print(transformedAst as Program);
   bundleStack.push(processedCode);
 }
 
-export async function execute(filePath: string): Promise<any> {
+export async function execute(filePath: string): Promise<void> {
   const ext = extname(filePath);
   if (!extensions.includes(ext)) throw new Error('Unsupported file extension');
 
