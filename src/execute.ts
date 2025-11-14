@@ -8,6 +8,7 @@ import {
   ImportDeclaration,
   VariableDeclaration,
   ExportDeclaration,
+  ExportNamedDeclaration,
   ExportDefaultExpression,
   ExportDefaultDeclaration,
   ExportAllDeclaration,
@@ -117,8 +118,12 @@ async function fullCodeGen(
   basePath: string,
   bundleStack: string[],
   externalImportSet: Set<string>,
-  processedFiles: Set<string> = new Set()
+  processedFiles: Set<string> = new Set(),
+  entryPoint?: string
 ): Promise<void> {
+  const actualEntryPoint = entryPoint ?? basePath;
+  const isEntryPoint = basePath === actualEntryPoint;
+
   if (processedFiles.has(basePath)) {
     return;
   }
@@ -161,6 +166,8 @@ async function fullCodeGen(
 
       if (!transformedNode) return null;
 
+      if (Array.isArray(transformedNode)) return transformedNode;
+
       const newNode: { [key: string]: any } = {};
 
       for (const key in transformedNode) {
@@ -181,6 +188,7 @@ async function fullCodeGen(
     | ExportDeclaration
     | ExportDefaultExpression
     | ExportDefaultDeclaration
+    | ExportNamedDeclaration
     | ExportAllDeclaration
     | TsExportAssignment
     | TsNamespaceExportDeclaration
@@ -200,11 +208,35 @@ async function fullCodeGen(
     'CallExpression',
   ]);
 
+  function createExportAssignment(name: string, value: string, span: any): ExpressionStatement {
+    return {
+      type: 'ExpressionStatement',
+      span,
+      expression: {
+        type: 'AssignmentExpression',
+        span,
+        operator: '=',
+        left: {
+          type: 'MemberExpression',
+          span,
+          object: {
+            type: 'MemberExpression',
+            span,
+            object: { type: 'Identifier', value: 'module', span, ctxt: 0, optional: false },
+            property: { type: 'Identifier', value: 'exports', span, ctxt: 0, optional: false },
+          },
+          property: { type: 'Identifier', value: name, span, ctxt: 0, optional: false },
+        },
+        right: { type: 'Identifier', value: value, span, ctxt: 0, optional: false },
+      },
+    } as ExpressionStatement;
+  }
+
   function isHandledNode(node: Node): node is HandledNode {
     return handledNodeTypes.has(node.type);
   }
 
-  async function transformNode(node: Node): Promise<Node | null> {
+  async function transformNode(node: Node): Promise<Node | Node[] | null> {
     if (!isHandledNode(node)) {
       return node;
     }
@@ -250,7 +282,7 @@ async function fullCodeGen(
           const dependencySource = readFileSync(resolvedPath, 'utf-8');
           const depExt = extname(resolvedPath);
           const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
-          await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
+          await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles, actualEntryPoint);
 
           // Generate variable declarations to resolve aliases and default named imports
           const declarations: string[] = [];
@@ -331,7 +363,7 @@ async function fullCodeGen(
             const depExt = extname(resolvedPath);
             const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
 
-            await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
+            await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles, actualEntryPoint);
           }
 
           return null;
@@ -340,11 +372,71 @@ async function fullCodeGen(
         break;
       }
 
-      case 'ExportDeclaration':
-        return node.declaration;
+      case 'ExportDeclaration': {
+        const decl = node.declaration;
+        if (!isEntryPoint) return decl;
+
+        let id: string | null = null;
+
+        if (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') {
+          id = decl.identifier?.value || null;
+        } else if (decl.type === 'VariableDeclaration' && decl.declarations[0]?.id.type === 'Identifier') {
+          id = decl.declarations[0].id.value;
+        }
+
+        if (!id) return decl;
+
+        return [decl, createExportAssignment(id, id, node.span)];
+      }
+
+      case 'ExportNamedDeclaration': {
+        // export { a, b as c }; のような指定子付きエクスポート
+        if (!node.specifiers || node.specifiers.length === 0) return null;
+
+        const results: Node[] = [];
+
+        for (const spec of node.specifiers) {
+          if (spec.type === 'ExportSpecifier') {
+            const exportedName = spec.exported ? (spec.exported as Identifier).value : (spec.orig as Identifier).value;
+            const localName = (spec.orig as Identifier).value;
+
+            results.push(createExportAssignment(exportedName, localName, node.span));
+          }
+        }
+
+        return results.length === 1 ? results[0] : results;
+      }
 
       case 'ExportDefaultExpression': {
-        return { type: 'ExpressionStatement', expression: node.expression, span: node.span } as ExpressionStatement;
+        if (!isEntryPoint) {
+          return {
+            type: 'ExpressionStatement',
+            span: node.span,
+            expression: node.expression,
+          } as ExpressionStatement;
+        }
+
+        return {
+          type: 'ExpressionStatement',
+          span: node.span,
+          expression: {
+            type: 'AssignmentExpression',
+            span: node.span,
+            operator: '=',
+            left: {
+              type: 'MemberExpression',
+              span: node.span,
+              object: {
+                type: 'MemberExpression',
+                span: node.span,
+                object: { type: 'Identifier', value: 'module', span: node.span, ctxt: 0, optional: false },
+                property: { type: 'Identifier', value: 'exports', span: node.span, ctxt: 0, optional: false },
+              },
+              property: { type: 'Identifier', value: 'default', span: node.span, ctxt: 0, optional: false },
+            },
+            right: node.expression,
+          },
+        } as ExpressionStatement;
       }
 
       case 'ExportDefaultDeclaration': {
@@ -371,7 +463,7 @@ async function fullCodeGen(
           const depExt = extname(resolvedPath);
           const depCode = jsExtensions.includes(depExt) ? dependencySource : transformer(dependencySource, depExt, resolvedPath);
 
-          await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles);
+          await fullCodeGen(depCode, resolvedPath, bundleStack, externalImportSet, processedFiles, actualEntryPoint);
         }
 
         return null;
@@ -485,22 +577,35 @@ async function fullCodeGen(
   bundleStack.push(processedCode);
 }
 
-export async function execute(filePath: string): Promise<void> {
+async function _execute(code: string, filePath: string): Promise<any> {
   const ext = extname(filePath);
-  if (!extensions.includes(ext)) throw new Error('Unsupported file extension');
+  if (!extensions.includes(ext)) {
+    throw new Error(`Unsupported file extension: ${ext}.`);
+  }
 
-  const source = readFileSync(filePath, 'utf-8');
-
-  const code = jsExtensions.includes(ext) ? source : transformer(source, ext, filePath);
+  const transformedCode = jsExtensions.includes(ext) ? code : transformer(code, ext, filePath);
 
   const bundleStack: string[] = [];
   const externalImportSet: Set<string> = new Set();
   const processedFiles: Set<string> = new Set();
-  await fullCodeGen(code, filePath, bundleStack, externalImportSet, processedFiles);
+  await fullCodeGen(transformedCode, filePath, bundleStack, externalImportSet, processedFiles);
 
   const finalBundle = [...externalImportSet].join('\n') + '\n' + bundleStack.join('\n');
 
-  const exportsObj = {};
+  const moduleObj = { exports: {} };
+
   const scriptFunction = new Function('require', 'console', 'process', '__dirname', '__filename', 'module', 'exports', finalBundle);
-  scriptFunction(require, console, process, dirname(filePath), filePath, { exports: exportsObj }, exportsObj);
+  scriptFunction(require, console, process, dirname(filePath), filePath, moduleObj, moduleObj.exports);
+
+  return moduleObj.exports;
+}
+
+export async function execute(filePath: string): Promise<any> {
+  const source = readFileSync(filePath, 'utf-8');
+  return _execute(source, filePath);
+}
+
+export async function executeCode(code: string, options?: { filePath?: string }): Promise<any> {
+  const filePath = options?.filePath ?? resolve(process.cwd(), 'inline.ts');
+  return _execute(code, filePath);
 }
