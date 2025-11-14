@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Rust Execute (rscute): Run TypeScript (ESM・CJS) in memory with SWC",
   "keywords": [
     "cli",
@@ -51,9 +51,10 @@
     "build": "rimraf dist && tsc && pnpm minify",
     "minify": "terser dist/execute.js -c -o dist/execute.js",
     "bundle": "pnpm cpy 'bundle/**' 'dist'",
-    "test": "node dist/cli.js test/test.tsx && pnpm cli && pnpm register",
+    "test": "node dist/cli.js test/test.tsx && pnpm cli && pnpm register && pnpm code",
     "cli": "node test/cli-api-test.js",
-    "register": "node test/register-api-test.js"
+    "register": "node test/register-api-test.js",
+    "code": "node test/execute-code-api-test.js"
   },
   "dependencies": {
     "@swc/core": "1.15.0"
