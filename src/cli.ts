@@ -2,11 +2,12 @@
 import path from 'path';
 import { execute } from './execute.js';
 
-type RunOptions = {
-  mode?: 'sequential' | 'parallel';
-};
-
-export async function run(files: string[] = [], options: RunOptions = {}) {
+export async function run(
+  files: string[],
+  options: {
+    mode?: 'sequential' | 'parallel';
+  } = {}
+) {
   const { mode = 'sequential' } = options;
 
   if (files.length === 0) {
