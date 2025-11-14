@@ -70,62 +70,76 @@ require('./filename.ts');
 
 ---
 
+<br/>
+
 ### Programmatic API
 
 Use `rscute`'s APIs for advanced control within your own scripts.
 
-**`execute(absolutePath)`**
+---
 
-The core API to execute a single file. Requires an absolute path for robust execution.
+**`run(files: string[], options?: { mode?: 'parallel' | 'sequential' }): Promise<void>`**
+
+Runs multiple TypeScript files with relative path resolution.  
+Supports execution modes such as parallel or sequential.
+
+- `files`: An array of file paths to execute.
+- `options` (optional): Execution options, e.g., `{ mode: 'parallel' | 'sequential' }`.
+
+Returns a Promise that resolves when all executions complete.
+
+```js
+import { run } from 'rscute/cli';
+
+// Run two files in parallel (default is sequential)
+await run(['./script-a.ts', './script-b.ts'], { mode: 'parallel' });
+```
+
+---
+
+<br>
+
+**`execute(absolutePath: string): Promise<any>`**
+
+Executes an absolute TypeScript/JavaScript file and returns the `exports` of the executable.  
+All side effects will be executed.
 
 ```js
 import { execute } from 'rscute/execute';
 import path from 'path';
 
 const absolutePath = path.resolve(__dirname, './script.ts');
-const module = await execute(absolutePath); // At this point, all side effects are executed.
+const module = await execute(absolutePath);
 
-module.func(); // Exported functions and closures can be safely referenced from return.
+module.func(); // You can use exported functions
 ```
-
-**`executeCode(code, options?)`**
-
-The core API to executeCode a code execution.
-
-```js
-import { executeCode } from 'rscute/execute';
-import path from 'path';
-import fs from 'fs/promises';
-
-const file = path.resolve(__dirname, './script.ts');
-const code = await fs.readFile(file);
-const module = await executeCode(code);
-// or
-const module = await executeCode(code, { filePath: file }); // Pass filePath to resolve relative module paths.
-
-module.func(); // The return value is the same as execute
-```
-
-You can directly execute code processed by AST parsing (supports mixed ESM/CJS).
 
 ---
 
-**`run(files, options)`**
+<br>
 
-The API for the CLI. Handles relative paths, multiple files, and execution modes.
+**`executeCode(code: string, options?: { filePath?: string }): Promise<any>`**
+
+Executes a code string. Relative paths can be resolved by specifying a `filePath`.  
+The return value is the same as `execute`.
 
 ```js
-import { run } from 'rscute/cli';
+import { executeCode } from 'rscute/execute';
 
-// Run two files in parallel(default: sequential)
-await run(['./script-a.ts', './script-b.ts'], { mode: 'parallel' });
+const code = `export function func() { return 123; }`;
+const module = await executeCode(code);
+
+console.log(module.func());
 ```
+
+---
 
 <br>
 
 ## Concept
 
-rscute executes the code that did the **path** resolution in the **Function** constructor, which is done in **memory**. Supported extensions are **.js, .ts, .mjs, .mts, .cjs, .cts, .jsx, and .tsx**.
+`rscute` executes code that resolves paths dynamically (supporting both ESM and CJS) inside the JavaScript `Function` constructor, keeping execution entirely in-memory without disk writes.  
+Supported extensions include `.js`, `.ts`, `.mjs`, `.mts`, `.cjs`, `.cts`, `.jsx`, and `.tsx`.
 
 <br>
 
