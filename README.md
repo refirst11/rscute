@@ -83,8 +83,30 @@ import { execute } from 'rscute/execute';
 import path from 'path';
 
 const absolutePath = path.resolve(__dirname, './script.ts');
-execute(absolutePath);
+const module = await execute(absolutePath); // At this point, all side effects are executed.
+
+module.func(); // Exported functions and closures can be safely referenced from return.
 ```
+
+**`executeCode(code, options?)`**
+
+The core API to executeCode a code execution.
+
+```js
+import { executeCode } from 'rscute/execute';
+import path from 'path';
+import fs from 'fs/promises';
+
+const file = path.resolve(__dirname, './script.ts');
+const code = await fs.readFile(file);
+const module = await executeCode(code);
+// or
+const module = await executeCode(code, { filePath: file }); // Pass filePath to resolve relative module paths.
+
+module.func(); // The return value is the same as execute
+```
+
+You can directly execute code processed by AST parsing (supports mixed ESM/CJS).
 
 ---
 
