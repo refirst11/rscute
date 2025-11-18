@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Rust Execute (rscute): Run TypeScript (ESM・CJS) in memory with SWC",
   "keywords": [
     "cli",
