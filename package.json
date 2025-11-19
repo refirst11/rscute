@@ -57,7 +57,7 @@
     "code": "node test/execute-code-api-test.js"
   },
   "dependencies": {
-    "@swc/core": "1.15.1"
+    "@swc/core": "1.15.2"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
