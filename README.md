@@ -1,4 +1,4 @@
-# rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-SWC-blue)](https://swc.rs/)
+# rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-swc-yellow)](https://swc.rs/)
 
 Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core)
 
@@ -22,9 +22,7 @@ pnpm add -D rscute
 
 ### CLI
 
-Run your TypeScript files directly from the command line.
-
-**Run a single file:**
+Run TypeScript files directly from the command line.
 
 ```sh
 npx rscute script.ts
@@ -68,41 +66,26 @@ register();
 require('./filename.ts');
 ```
 
----
-
-<br/>
-
 ### Programmatic API
 
-Use `rscute`'s APIs for advanced control within your own scripts.
+#### `run(files, options)`
 
----
-
-**`run(files: string[], options?: { mode?: 'parallel' | 'sequential' }): Promise<void>`**
-
-Runs multiple TypeScript files with relative path resolution.  
-Supports execution modes such as parallel or sequential.
-
-- `files`: An array of file paths to execute.
-- `options` (optional): Execution options, e.g., `{ mode: 'parallel' | 'sequential' }`.
-
-Returns a Promise that resolves when all executions complete.
+Runs multiple TypeScript files with relative path resolution. Supports parallel or sequential execution.
 
 ```js
 import { run } from 'rscute/cli';
 
-// Run two files in parallel (default is sequential)
 await run(['./script-a.ts', './script-b.ts'], { mode: 'parallel' });
 ```
 
----
+**Parameters:**
 
-<br>
+- `files` - Array of file paths to execute
+- `options` - Execution options: `{ mode: 'parallel' | 'sequential' }`
 
-**`execute(absolutePath: string): Promise<any>`**
+#### `execute(absolutePath)`
 
-Executes an absolute TypeScript/JavaScript file and returns the `exports` of the executable.  
-All side effects will be executed.
+Executes an absolute TypeScript/JavaScript file and returns the module exports.
 
 ```js
 import { execute } from 'rscute/execute';
@@ -111,17 +94,12 @@ import path from 'path';
 const absolutePath = path.resolve(__dirname, './script.ts');
 const module = await execute(absolutePath);
 
-module.func(); // You can use exported functions
+module.func(); // Use exported functions
 ```
 
----
+#### `executeCode(code, options)`
 
-<br>
-
-**`executeCode(code: string, options?: { filePath?: string }): Promise<any>`**
-
-Executes a code string. Relative paths can be resolved by specifying a `filePath`.  
-The return value is the same as `execute`.
+Executes a code string. Relative paths can be resolved by specifying a `filePath`.
 
 ```js
 import { executeCode } from 'rscute/execute';
@@ -129,19 +107,23 @@ import { executeCode } from 'rscute/execute';
 const code = `export function func() { return 123; }`;
 const module = await executeCode(code);
 
-console.log(module.func());
+console.log(module.func()); // 123
 ```
+
+**Parameters:**
+
+- `code` - Code string to execute
+- `options` - Optional: `{ filePath?: string }` for relative path resolution
 
 ---
 
-<br>
+## How It Works
 
-## Concept
+`rscute` executes code that resolves paths dynamically (supporting both ESM and CJS) inside the JavaScript `Function` constructor, keeping execution entirely in-memory without disk writes.
 
-`rscute` executes code that resolves paths dynamically (supporting both ESM and CJS) inside the JavaScript `Function` constructor, keeping execution entirely in-memory without disk writes.  
-Supported extensions include `.js`, `.ts`, `.mjs`, `.mts`, `.cjs`, `.cts`, `.jsx`, and `.tsx`.
+**Supported extensions:** `.js`, `.ts`, `.mjs`, `.mts`, `.cjs`, `.cts`, `.jsx`, `.tsx`
 
-<br>
+---
 
 ## License
 
