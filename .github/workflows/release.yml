@@ -3,7 +3,7 @@ name: Publish Package
 on:
   push:
     tags:
-      - 'v*'
+      - 'rscute@*'
 
 permissions:
   id-token: write
@@ -18,10 +18,10 @@ jobs:
         with:
           node-version: 25
           registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
 
       - name: npm publish with provenance
-        run: npm install -g pnpm
-      - run: pnpm install
+        run: pnpm install
       - run: pnpm build
       - run: pnpm test
       - run: npm publish
