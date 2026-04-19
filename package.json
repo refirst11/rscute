@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "In-memory TypeScript bundler and executor powered by SWC",
   "keywords": [
     "swc",
@@ -53,7 +53,7 @@
     "test": "node test_all.js"
   },
   "dependencies": {
-    "@swc/core": "1.15.2"
+    "@swc/core": "1.15.30"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
