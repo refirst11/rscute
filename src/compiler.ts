@@ -29,7 +29,7 @@ import { resolve, dirname, extname } from 'path';
 import { cwd } from 'process';
 import { readFileCached } from './utils';
 
-type LoadTSConfig = null | { paths: Record<string, string[]>; baseUrl: string };
+type LoadTSConfig = null | { paths: Record<string, string[]> };
 type ImportClause = { type: 'named'; original: string; mangled: string } | { type: 'default'; mangled: string } | { type: 'namespace'; mangled: string };
 
 type HandledNode =
@@ -170,33 +170,30 @@ function resolvePathWithExtension(basePath: string): string {
 function resolveImportPath(importPath: string, tsConfig: LoadTSConfig): string {
   if (importResolutionCache.has(importPath)) return importResolutionCache.get(importPath)!;
 
-  if (!tsConfig?.baseUrl) {
+  if (!tsConfig?.paths) {
     importResolutionCache.set(importPath, importPath);
     return importPath;
   }
 
-  const baseDir = resolve(getProjectRoot(), tsConfig.baseUrl);
+  const baseDir = getProjectRoot();
 
-  if (tsConfig.paths) {
-    for (const [alias, targetPaths] of Object.entries(tsConfig.paths)) {
-      const aliasPrefix = alias.replace(/\*$/, '');
-      if (!importPath.startsWith(aliasPrefix)) continue;
+  for (const [alias, targetPaths] of Object.entries(tsConfig.paths)) {
+    const aliasPrefix = alias.replace(/\*$/, '');
+    if (!importPath.startsWith(aliasPrefix)) continue;
 
-      for (const target of targetPaths) {
-        const resolvedTarget = target.replace(/\*$/, '');
-        const candidatePath = resolve(baseDir, resolvedTarget + importPath.slice(aliasPrefix.length));
-        const resolvedPath = resolvePathWithExtension(candidatePath);
-        if (existsSync(resolvedPath)) {
-          importResolutionCache.set(importPath, resolvedPath);
-          return resolvedPath;
-        }
+    for (const target of targetPaths) {
+      const resolvedTarget = target.replace(/\*$/, '');
+      const candidatePath = resolve(baseDir, resolvedTarget + importPath.slice(aliasPrefix.length));
+      const resolvedPath = resolvePathWithExtension(candidatePath);
+      if (existsSync(resolvedPath)) {
+        importResolutionCache.set(importPath, resolvedPath);
+        return resolvedPath;
       }
     }
   }
 
-  const finalPath = resolve(baseDir, importPath);
-  importResolutionCache.set(importPath, finalPath);
-  return finalPath;
+  importResolutionCache.set(importPath, importPath);
+  return importPath;
 }
 
 function transformer(source: string, ext: string, filePath: string): string {
