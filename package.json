@@ -1,16 +1,17 @@
 {
   "name": "rscute",
-  "version": "1.1.5",
-  "description": "Rust transform: TypeScript ESM・CJS faster execution in memory with swc",
+  "version": "1.2.0",
+  "description": "In-memory TypeScript bundler and executor powered by SWC",
   "keywords": [
+    "swc",
+    "bundler",
+    "executor",
+    "typescript",
     "cli",
     "runtime",
     "node",
     "cjs",
-    "commonjs",
-    "esm",
-    "typescript",
-    "typescript runner"
+    "esm"
   ],
   "author": "Refirst 11",
   "repository": {
@@ -23,15 +24,15 @@
   "license": "MIT",
   "exports": {
     ".": "./dist/index.js",
-    "./execute": {
-      "import": "./dist/execute.js",
-      "require": "./dist/execute.js",
-      "types": "./dist/execute.d.ts"
+    "./bundle": {
+      "import": "./dist/bundle.js",
+      "require": "./dist/bundle.js",
+      "types": "./dist/bundle.d.ts"
     },
-    "./cli": {
-      "import": "./dist/cli.js",
-      "require": "./dist/cli.js",
-      "types": "./dist/cli.d.ts"
+    "./vm": {
+      "import": "./dist/vm.js",
+      "require": "./dist/vm.js",
+      "types": "./dist/vm.d.ts"
     },
     "./register": {
       "import": "./dist/register.js",
@@ -48,22 +49,16 @@
     "dist/"
   ],
   "scripts": {
-    "build": "rimraf dist && tsc && pnpm minify",
-    "minify": "terser dist/execute.js -c -o dist/execute.js",
-    "bundle": "pnpm cpy 'bundle/**' 'dist'",
-    "test": "node dist/cli.js test/test.tsx && pnpm cli && pnpm register && pnpm code",
-    "cli": "node test/cli-api-test.js",
-    "register": "node test/register-api-test.js",
-    "code": "node test/execute-code-api-test.js"
+    "build": "rimraf dist && tsc",
+    "test": "node test_all.js"
   },
   "dependencies": {
     "@swc/core": "1.15.2"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
+    "@types/node": "^25.6.0",
     "rimraf": "^6.1.0",
-    "terser": "^5.44.1",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "publishConfig": {
     "access": "public",
