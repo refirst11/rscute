@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "In-memory TypeScript bundler and executor powered by SWC",
   "keywords": [
     "swc",
@@ -49,7 +49,7 @@
     "dist/"
   ],
   "scripts": {
-    "build": "rimraf dist && tsc",
+    "build": "rimraf dist && tsc && chmod +x dist/cli.js",
     "test": "node test_all.js"
   },
   "dependencies": {
