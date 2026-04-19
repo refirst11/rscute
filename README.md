@@ -1,62 +1,34 @@
-# rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-swc-yellow)](https://swc.rs/)
+# rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-swc-skyblue)](https://swc.rs/)
 
 Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core)
 
-## Installation
+Intercepts `require` calls for TypeScript files, recursively resolves dependencies, and evaluates them as a single flat bundle — all in-memory, with automatic symbol mangling to prevent collisions.
 
-**npm:**
+## Installation
 
 ```sh
 npm i -D rscute
 ```
 
-**pnpm:**
-
-```sh
-pnpm add -D rscute
-```
-
-> When using pnpm, use pnpm exec instead of npx for running commands.
+> When using pnpm, use `pnpm exec` instead of `npx` for running commands.
 
 ## Usage
 
 ### CLI
 
-Run TypeScript files directly from the command line.
-
 ```sh
 npx rscute script.ts
 ```
 
----
+### Register
 
-**Run multiple files (sequential by default):**
-
-```sh
-npx rscute script-a.ts script-b.ts
-```
-
----
-
-**Run multiple files in parallel(-p or --parallel):**
-
-```sh
-npx rscute script-a.ts script-b.ts -p
-```
-
----
-
-### Require Hook
-
-Enable on-the-fly TypeScript compilation for `require()`.
-
-**From the command line:**
+**Node.js `-r` flag:**
 
 ```sh
 node -r rscute script.ts
 ```
 
-**From within your code:**
+**Hook:**
 
 ```js
 const { register } = require('rscute/register');
@@ -66,64 +38,56 @@ register();
 require('./filename.ts');
 ```
 
+> **Supported entry extensions:** `.ts`, `.tsx`, `.cts`
+
 ### Programmatic API
 
-#### `run(files, options)`
+#### `execute(code, options)` — `rscute/vm`
 
-Runs multiple TypeScript files with relative path resolution. Supports parallel or sequential execution.
+Compiles and executes a TypeScript code string in a sandboxed `vm.Context`, returning its module exports.
 
 ```js
-import { run } from 'rscute/cli';
+import { execute } from 'rscute/vm';
 
-await run(['./script-a.ts', './script-b.ts'], { mode: 'parallel' });
+const code = `export function greet() { return 'hello'; }`;
+const result = execute(code);
+
+console.log(result.greet()); // hello
 ```
 
-**Parameters:**
+| Parameter | Type                    | Description                                        |
+| --------- | ----------------------- | -------------------------------------------------- |
+| `code`    | `string`                | TypeScript or JavaScript code string               |
+| `options` | `{ filePath?: string }` | Optional. Base path for relative import resolution |
 
-- `files` - Array of file paths to execute
-- `options` - Execution options: `{ mode: 'parallel' | 'sequential' }`
+#### `bundle(filePath)` — `rscute/bundle`
 
-#### `execute(absolutePath)`
-
-Executes an absolute TypeScript/JavaScript file and returns the module exports.
+Resolves an entry file and all its dependencies into a single flat JavaScript string, without executing it.
 
 ```js
-import { execute } from 'rscute/execute';
+import { bundle } from 'rscute/bundle';
 import path from 'path';
 
-const absolutePath = path.resolve(__dirname, './script.ts');
-const module = await execute(absolutePath);
-
-module.func(); // Use exported functions
+const code = bundle(path.resolve(__dirname, './script.ts'));
 ```
 
-#### `executeCode(code, options)`
-
-Executes a code string. Relative paths can be resolved by specifying a `filePath`.
-
-```js
-import { executeCode } from 'rscute/execute';
-
-const code = `export function func() { return 123; }`;
-const module = await executeCode(code);
-
-console.log(module.func()); // 123
-```
-
-**Parameters:**
-
-- `code` - Code string to execute
-- `options` - Optional: `{ filePath?: string }` for relative path resolution
-
----
+| Parameter  | Type     | Description                     |
+| ---------- | -------- | ------------------------------- |
+| `filePath` | `string` | Absolute path to the entry file |
 
 ## How It Works
 
-`rscute` executes code that resolves paths dynamically (supporting both ESM and CJS) inside the JavaScript `Function` constructor, keeping execution entirely in-memory without disk writes.
+rscute resolves and bundles imported modules recursively at runtime using SWC, without writing to disk.
+
+When the same symbol name appears in multiple bundled files, rscute mangles conflicting names automatically before evaluation to prevent collisions in the flat bundle scope.
+
+| Entry Point    | Behavior                                             |
+| -------------- | ---------------------------------------------------- |
+| CLI / register | Compiles and evaluates via module loader             |
+| rscute/bundle  | Returns compiled bundle string in-memory             |
+| rscute/vm      | Compiles and evaluates inside an isolated vm sandbox |
 
 **Supported extensions:** `.js`, `.ts`, `.mjs`, `.mts`, `.cjs`, `.cts`, `.jsx`, `.tsx`
-
----
 
 ## License
 
