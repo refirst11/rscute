@@ -1,4 +1,4 @@
-const { executeCode } = require('../dist/execute.js');
+const { execute } = require('../dist/vm.js');
 
 const code = `
 export default { a: 1 };
@@ -9,7 +9,7 @@ export function collect() {
 `;
 
 async function abs() {
-  const { default: df, a, collect } = await executeCode(code);
+  const { default: df, a, collect } = execute(code);
   console.log(df.a);
   console.log(a);
   console.log(collect());
