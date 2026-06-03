@@ -1,93 +1,75 @@
-# rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-swc-skyblue)](https://swc.rs/)
+# rscute &middot; [![powered by SWC](https://img.shields.io/badge/powered%20by-@swc/core-purple)](https://swc.rs/)
 
-Faster Executor for **TypeScript** using [**@swc/core**](https://swc.rs/docs/usage/core)
+A lightweight, SWC-powered TypeScript JIT runner and bundler for Node.js.
 
-Intercepts `require` calls for TypeScript files, recursively resolves dependencies, and evaluates them as a single flat bundle — all in-memory, with automatic symbol mangling to prevent collisions.
+> **What's in a name?**
+>
+> - **RS** = Rust (leveraging the speed of **SWC** under the hood).
+> - **cute** = e**xecute** (nimble, lightweight, and smart execution).
+>
+> **rscute** intercepts module imports on-the-fly and compiles files on-demand to run and bundle TypeScript.
 
-## Installation
+---
+
+## Core Capabilities
+
+- **On-the-Fly JIT Execution**: Runs `.ts`, `.tsx`, `.cts`, and `.mts` files instantly via a zero-config CLI. It intercepts module resolutions on-the-fly, loads dependencies on-demand, and resolves `tsconfig.json` path mappings.
+- **Isolated VM Sandbox (`rscute/vm`)**: Compiles and evaluates TypeScript code strings inside Node's isolated `vm` context.
+- **Bundler API (`rscute/bundle`)**: Resolves an entry file and bundles all its local dependencies into a single flat JavaScript string, without writing to disk.
+
+---
+
+## Quick Start
+
+### Installation
 
 ```sh
 npm i -D rscute
 ```
 
-> When using pnpm, use `pnpm exec` instead of `npx` for running commands.
+_Note: If you are using `pnpm`, run commands using `pnpm exec` instead of `npx`._
 
-## Usage
-
-### CLI
+### CLI Execution
 
 ```sh
 npx rscute script.ts
 ```
 
-### Register
+---
 
-**Node.js `-r` flag:**
+## Programmatic APIs
 
-```sh
-node -r rscute script.ts
-```
-
-**Hook:**
-
-```js
-const { register } = require('rscute/register');
-
-register();
-
-require('./filename.ts');
-```
-
-> **Supported entry extensions:** `.ts`, `.tsx`, `.cts`
-
-### Programmatic API
-
-#### `execute(code, options)` — `rscute/vm`
-
-Compiles and executes a TypeScript code string in a sandboxed `vm.Context`, returning its module exports.
+### 1. sandbox execution (`rscute/vm`)
 
 ```js
 import { execute } from 'rscute/vm';
 
-const code = `export function greet() { return 'hello'; }`;
-const result = execute(code);
+const exports = execute(`
+  export const val = 42;
+  export function greet(name: string): string {
+    return \`Hello, \${name}!\`;
+  }
+`);
 
-console.log(result.greet()); // hello
+console.log(exports.val);
+console.log(exports.greet('Developer'));
 ```
 
-| Parameter | Type                    | Description                                        |
-| --------- | ----------------------- | -------------------------------------------------- |
-| `code`    | `string`                | TypeScript or JavaScript code string               |
-| `options` | `{ filePath?: string }` | Optional. Base path for relative import resolution |
+| Parameter | Type                    | Description                                                             |
+| --------- | ----------------------- | ----------------------------------------------------------------------- |
+| `code`    | `string`                | TypeScript or JavaScript source code string                             |
+| `options` | `{ filePath?: string }` | Optional. Base path used for relative import resolution inside the code |
 
-#### `bundle(filePath)` — `rscute/bundle`
-
-Resolves an entry file and all its dependencies into a single flat JavaScript string, without executing it.
+### 2. bundling (`rscute/bundle`)
 
 ```js
 import { bundle } from 'rscute/bundle';
 import path from 'path';
 
-const code = bundle(path.resolve(__dirname, './script.ts'));
+const bundledCode = bundle(path.resolve(__dirname, './script.ts'));
 ```
 
-| Parameter  | Type     | Description                     |
-| ---------- | -------- | ------------------------------- |
-| `filePath` | `string` | Absolute path to the entry file |
-
-## How It Works
-
-rscute resolves and bundles imported modules recursively at runtime using SWC, without writing to disk.
-
-When the same symbol name appears in multiple bundled files, rscute mangles conflicting names automatically before evaluation to prevent collisions in the flat bundle scope.
-
-| Entry Point    | Behavior                                             |
-| -------------- | ---------------------------------------------------- |
-| CLI / register | Compiles and evaluates via module loader             |
-| rscute/bundle  | Returns compiled bundle string in-memory             |
-| rscute/vm      | Compiles and evaluates inside an isolated vm sandbox |
-
-**Supported extensions:** `.js`, `.ts`, `.mjs`, `.mts`, `.cjs`, `.cts`, `.jsx`, `.tsx`
+---
 
 ## License
 
