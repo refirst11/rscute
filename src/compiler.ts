@@ -22,14 +22,17 @@ import {
   KeyValuePatternProperty,
   KeyValueProperty,
   AssignmentPatternProperty,
+  AssignmentPattern,
   ClassDeclaration,
 } from '@swc/core';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, extname } from 'path';
 import { cwd } from 'process';
-import { readFileCached } from './utils';
+import { readFileCached, getProjectRoot, loadTsConfig, LoadTSConfig } from './utils';
 
-type LoadTSConfig = null | { paths: Record<string, string[]> };
+interface IdentifierWithCtxt extends Identifier {
+  ctxt?: number;
+}
 type ImportClause = { type: 'named'; original: string; mangled: string } | { type: 'default'; mangled: string } | { type: 'namespace'; mangled: string };
 
 type HandledNode =
@@ -71,8 +74,101 @@ const processingPromises = new Map<string, Promise<string>>();
 const resolveCache = new Map<string, string>();
 const importResolutionCache = new Map<string, string>();
 const ignoredKeys = new Set(['span', 'ctxt', 'optional', 'start', 'end', 'loc', 'type', 'declare', 'generator', 'async']);
-let tsConfigCache: LoadTSConfig | undefined;
-let projectRootCache: string | undefined;
+
+// Reserved names to prevent shadowing global objects
+const reservedGlobalNames = new Set([
+  // Node.js globals
+  'process',
+  'console',
+  'global',
+  'globalThis',
+  'require',
+  'module',
+  'exports',
+  '__filename',
+  '__dirname',
+  'Buffer',
+  'clearImmediate',
+  'clearInterval',
+  'clearTimeout',
+  'setImmediate',
+  'setInterval',
+  'setTimeout',
+  'queueMicrotask',
+  'performance',
+  'fetch',
+  'Headers',
+  'Request',
+  'Response',
+  'URL',
+  'URLSearchParams',
+
+  // JS standard globals
+  'Infinity',
+  'NaN',
+  'undefined',
+  'eval',
+  'isFinite',
+  'isNaN',
+  'parseFloat',
+  'parseInt',
+  'decodeURI',
+  'decodeURIComponent',
+  'encodeURI',
+  'encodeURIComponent',
+  'Object',
+  'Function',
+  'Boolean',
+  'Symbol',
+  'Error',
+  'AggregateError',
+  'EvalError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'TypeError',
+  'URIError',
+  'Number',
+  'BigInt',
+  'Math',
+  'Date',
+  'String',
+  'RegExp',
+  'Array',
+  'Int8Array',
+  'Uint8Array',
+  'Uint8ClampedArray',
+  'Int16Array',
+  'Uint16Array',
+  'Int32Array',
+  'Uint32Array',
+  'Float32Array',
+  'Float64Array',
+  'BigInt64Array',
+  'BigUint64Array',
+  'Map',
+  'Set',
+  'WeakMap',
+  'WeakSet',
+  'ArrayBuffer',
+  'SharedArrayBuffer',
+  'DataView',
+  'Atomics',
+  'JSON',
+  'Promise',
+  'Reflect',
+  'Proxy',
+  'Intl',
+
+  // Common browser globals (to prevent shadowing in window/DOM environments)
+  'window',
+  'document',
+  'navigator',
+  'location',
+  'history',
+  'screen',
+  'alert',
+]);
 
 // Mangling state
 const bundleUsedNames = new Set<string>();
@@ -98,11 +194,10 @@ function collectLocalBindings(ast: Program): string[] {
         if (decl.id.type === 'Identifier') {
           bindings.push(decl.id.value);
         } else if (decl.id.type === 'ObjectPattern') {
-          for (const prop of (decl.id as any).properties) {
+          for (const prop of decl.id.properties) {
             if (prop.type === 'AssignmentPatternProperty' && prop.key.type === 'Identifier') {
               bindings.push(prop.key.value);
             } else if (prop.type === 'KeyValuePatternProperty') {
-              // { original: alias } の場合、alias がローカル変数名
               if (prop.value.type === 'Identifier') bindings.push(prop.value.value);
             }
           }
@@ -113,39 +208,7 @@ function collectLocalBindings(ast: Program): string[] {
   return [...new Set(bindings)];
 }
 
-function getProjectRoot(): string {
-  if (projectRootCache) return projectRootCache;
-
-  let currentDir = cwd();
-  while (!existsSync(resolve(currentDir, 'package.json'))) {
-    const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) {
-      projectRootCache = currentDir;
-      return currentDir;
-    }
-    currentDir = parentDir;
-  }
-  projectRootCache = currentDir;
-  return currentDir;
-}
-
-function loadTsConfig(): LoadTSConfig {
-  if (tsConfigCache !== undefined) return tsConfigCache;
-
-  const tsConfigPath = resolve(getProjectRoot(), 'tsconfig.json');
-  if (!existsSync(tsConfigPath)) {
-    tsConfigCache = null;
-    return null;
-  }
-
-  try {
-    const config = JSON.parse(readFileSync(tsConfigPath, 'utf-8'));
-    tsConfigCache = config.compilerOptions || null;
-  } catch {
-    tsConfigCache = null;
-  }
-  return tsConfigCache as LoadTSConfig;
-}
+// getProjectRoot and loadTsConfig are imported from './utils'
 
 function resolvePathWithExtension(basePath: string): string {
   if (resolveCache.has(basePath)) return resolveCache.get(basePath)!;
@@ -167,7 +230,7 @@ function resolvePathWithExtension(basePath: string): string {
   return basePath;
 }
 
-function resolveImportPath(importPath: string, tsConfig: LoadTSConfig): string {
+function resolveImportPath(importPath: string, tsConfig: LoadTSConfig, basePath: string): string {
   if (importResolutionCache.has(importPath)) return importResolutionCache.get(importPath)!;
 
   if (!tsConfig?.paths) {
@@ -175,7 +238,7 @@ function resolveImportPath(importPath: string, tsConfig: LoadTSConfig): string {
     return importPath;
   }
 
-  const baseDir = getProjectRoot();
+  const baseDir = getProjectRoot(dirname(basePath));
 
   for (const [alias, targetPaths] of Object.entries(tsConfig.paths)) {
     const aliasPrefix = alias.replace(/\*$/, '');
@@ -258,7 +321,7 @@ async function prefetchImports(nodes: Node[], basePath: string, tsConfig: LoadTS
   await Promise.all(
     importsToLoad.map(async importPath => {
       if (excludedExtensions.includes(extname(importPath))) return;
-      let resolvedPath = importPath.startsWith('.') ? resolve(dirname(basePath), importPath) : resolveImportPath(importPath, tsConfig);
+      let resolvedPath = importPath.startsWith('.') ? resolve(dirname(basePath), importPath) : resolveImportPath(importPath, tsConfig, basePath);
       resolvedPath = resolvePathWithExtension(resolvedPath);
 
       if (existsSync(resolvedPath)) {
@@ -378,7 +441,7 @@ function fullCodeGen(
   if (processedFiles.has(basePath)) return;
   processedFiles.add(basePath);
 
-  const tsConfig = loadTsConfig();
+  const tsConfig = loadTsConfig(dirname(basePath));
   const externalImportMap: Map<string, Set<ImportClause>> = new Map();
 
   const shim = `const __shim_dirname = __dirname;\nconst __shim_filename = __filename;\nconst { pathToFileURL } = require('url');\n`;
@@ -431,7 +494,7 @@ function fullCodeGen(
     const importPath = node.source.value;
     if (excludedExtensions.includes(extname(importPath))) return null;
 
-    let resolvedPath = importPath.startsWith('.') ? resolve(dirname(basePath), importPath) : resolveImportPath(importPath, tsConfig);
+    let resolvedPath = importPath.startsWith('.') ? resolve(dirname(basePath), importPath) : resolveImportPath(importPath, tsConfig, basePath);
     resolvedPath = resolvePathWithExtension(resolvedPath);
 
     if (!existsSync(resolvedPath)) {
@@ -493,14 +556,14 @@ function fullCodeGen(
     if ((declaration.init.callee as Identifier).value !== 'require') return node;
 
     const requirePath = (declaration.init.arguments[0].expression as Identifier).value;
-    let resolvedPath = requirePath.startsWith('.') ? resolve(dirname(basePath), requirePath) : resolveImportPath(requirePath, tsConfig);
+    let resolvedPath = requirePath.startsWith('.') ? resolve(dirname(basePath), requirePath) : resolveImportPath(requirePath, tsConfig, basePath);
     resolvedPath = resolvePathWithExtension(resolvedPath);
 
     if (!existsSync(resolvedPath)) {
       if (declaration.id.type === 'Identifier') {
         addExternalImport(declaration.id.value, requirePath);
       } else if (declaration.id.type === 'ObjectPattern') {
-        const properties = (declaration.id as any).properties
+        const properties = declaration.id.properties
           .map((prop: ObjectPatternProperty) => {
             if (prop.type === 'AssignmentPatternProperty' && prop.key.type === 'Identifier') {
               const original = prop.key.value;
@@ -528,7 +591,7 @@ function fullCodeGen(
         const mangledLocal = currentLocalMangleMap.get(localName) || localName;
         bundleStack.push(`const ${mangledLocal} = ${mangledNameInSource};`);
       } else if (declaration.id.type === 'ObjectPattern') {
-        for (const prop of (declaration.id as any).properties) {
+        for (const prop of declaration.id.properties) {
           if (prop.type === 'AssignmentPatternProperty' && prop.key.type === 'Identifier') {
             const originalName = prop.key.value;
             const mangledName = sourceMangleMap?.get(originalName) || originalName;
@@ -567,6 +630,50 @@ function fullCodeGen(
     }
 
     if (typeof node === 'object' && node !== null) {
+      if ('type' in node && node.type === 'AssignmentPatternProperty') {
+        const prop = node as AssignmentPatternProperty;
+        const originalName = prop.key.value;
+        const mangledName = currentLocalMangleMap.get(originalName) || currentFileMangleMap.get(originalName);
+        if (mangledName && mangledName !== originalName) {
+          if (prop.value === null) {
+            return {
+              type: 'KeyValuePatternProperty',
+              key: visit(prop.key, true),
+              value: {
+                type: 'Identifier',
+                span: prop.span,
+                value: mangledName,
+                ctxt: (prop.key as IdentifierWithCtxt).ctxt,
+                optional: false,
+              },
+            };
+          } else {
+            return {
+              type: 'KeyValuePatternProperty',
+              key: visit(prop.key, true),
+              value: {
+                type: 'AssignmentPattern',
+                span: prop.span,
+                left: {
+                  type: 'Identifier',
+                  span: prop.key.span,
+                  value: mangledName,
+                  ctxt: (prop.key as IdentifierWithCtxt).ctxt,
+                  optional: false,
+                },
+                right: visit(prop.value, false),
+              },
+            };
+          }
+        } else {
+          return {
+            ...prop,
+            key: visit(prop.key, true),
+            value: visit(prop.value, false),
+          };
+        }
+      }
+
       if ('type' in node && node.type === 'Identifier' && !isProperty) {
         const idNode = node as Identifier;
 
@@ -581,11 +688,13 @@ function fullCodeGen(
         }
       }
 
-      let targetNode: any = node;
+      let targetNode = node;
       if ('type' in node && isHandledNode(node as Node)) {
         targetNode = transformNode(node as Node);
         if (!targetNode) return null;
-        if (Array.isArray(targetNode)) return targetNode;
+        if (Array.isArray(targetNode)) {
+          return targetNode.map(item => visit(item)).filter(Boolean);
+        }
       }
 
       const obj = targetNode;
@@ -597,6 +706,36 @@ function fullCodeGen(
 
         const value = obj[key];
         if (typeof value === 'object' && value !== null) {
+          if (obj.type === 'ObjectExpression' && key === 'properties') {
+            const newProperties: any[] = [];
+            for (const prop of value) {
+              if (prop.type === 'Identifier') {
+                const originalName = prop.value;
+                const mangledName = currentLocalMangleMap.get(originalName) || currentFileMangleMap.get(originalName);
+                if (mangledName && mangledName !== originalName) {
+                  newProperties.push({
+                    type: 'KeyValueProperty',
+                    key: visit(prop, true),
+                    value: {
+                      type: 'Identifier',
+                      span: prop.span,
+                      value: mangledName,
+                      ctxt: prop.ctxt,
+                      optional: false,
+                    },
+                  });
+                } else {
+                  newProperties.push(visit(prop, true));
+                }
+              } else {
+                newProperties.push(visit(prop));
+              }
+            }
+            hasChange = true;
+            newProps[key] = newProperties;
+            continue;
+          }
+
           // Avoid mangling property names in MemberExpression or keys in ObjectProperty
           let childIsProperty = false;
           if ('type' in obj && obj.type === 'MemberExpression' && key === 'property') {
@@ -732,7 +871,7 @@ function fullCodeGen(
 
       case 'ExportAllDeclaration': {
         const exportPath = node.source.value;
-        let resolvedPath = exportPath.startsWith('.') ? resolve(dirname(basePath), exportPath) : resolveImportPath(exportPath, tsConfig);
+        let resolvedPath = exportPath.startsWith('.') ? resolve(dirname(basePath), exportPath) : resolveImportPath(exportPath, tsConfig, basePath);
         resolvedPath = resolvePathWithExtension(resolvedPath);
 
         if (existsSync(resolvedPath)) {
@@ -854,11 +993,18 @@ function fullCodeGen(
 }
 
 export function compiler(code: string, filePath: string): string {
-  // Reset mangling state for each bundle
+  // Reset mangling state and caches for each bundle
   bundleUsedNames.clear();
+  for (const name of reservedGlobalNames) {
+    bundleUsedNames.add(name);
+  }
   bundleMangleMap.clear();
   fileDefaultExportMap.clear();
   fileLocalMangleMap.clear();
+  transformCache.clear();
+  processingPromises.clear();
+  resolveCache.clear();
+  importResolutionCache.clear();
 
   const ext = extname(filePath);
   if (!extensions.includes(ext)) {
