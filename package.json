@@ -1,7 +1,7 @@
 {
   "name": "rscute",
-  "version": "1.2.2",
-  "description": "In-memory TypeScript bundler and executor powered by SWC",
+  "version": "2.0.0",
+  "description": "A lightweight, SWC-powered TypeScript JIT runner and bundler for Node.js",
   "keywords": [
     "swc",
     "bundler",
@@ -50,10 +50,10 @@
   ],
   "scripts": {
     "build": "rimraf dist && tsc && chmod +x dist/cli.js",
-    "test": "node test_all.js"
+    "test": "node integration_test.js"
   },
   "dependencies": {
-    "@swc/core": "1.15.30"
+    "@swc/core": "1.15.40"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
