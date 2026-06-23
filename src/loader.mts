@@ -90,6 +90,8 @@ export async function load(
         const format = ext === '.cts' ? 'commonjs' : 'module';
 
         const { code } = transformSync(source, {
+          filename: filePath,
+          sourceMaps: 'inline',
           jsc: {
             parser: {
               syntax: 'typescript',
