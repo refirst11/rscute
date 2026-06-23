@@ -54,6 +54,8 @@ export function register() {
       }
       const source = readFileSync(filename, 'utf8');
       const { code } = transformSync(source, {
+        filename,
+        sourceMaps: 'inline',
         jsc: {
           parser: {
             syntax: 'typescript',
