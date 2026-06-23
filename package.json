@@ -1,10 +1,9 @@
 {
   "name": "rscute",
-  "version": "2.0.0",
-  "description": "A lightweight, SWC-powered TypeScript JIT runner and bundler for Node.js",
+  "version": "3.0.0",
+  "description": "A lightweight, SWC-powered TypeScript JIT runner for Node.js",
   "keywords": [
     "swc",
-    "bundler",
     "executor",
     "typescript",
     "cli",
@@ -23,17 +22,6 @@
   },
   "license": "MIT",
   "exports": {
-    ".": "./dist/index.js",
-    "./bundle": {
-      "import": "./dist/bundle.js",
-      "require": "./dist/bundle.js",
-      "types": "./dist/bundle.d.ts"
-    },
-    "./vm": {
-      "import": "./dist/vm.js",
-      "require": "./dist/vm.js",
-      "types": "./dist/vm.d.ts"
-    },
     "./register": {
       "import": "./dist/register.js",
       "require": "./dist/register.js",
@@ -53,7 +41,7 @@
     "test": "node integration_test.js"
   },
   "dependencies": {
-    "@swc/core": "1.15.40"
+    "@swc/core": "1.15.43"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
@@ -63,5 +51,8 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "engines": {
+    "node": ">=20.6.0"
   }
 }
