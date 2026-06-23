@@ -1,7 +1,7 @@
 {
   "name": "rscute",
-  "version": "3.0.0",
-  "description": "A lightweight, SWC-powered TypeScript JIT runner for Node.js",
+  "version": "3.0.1",
+  "description": "SWC-powered TypeScript JIT runner for Node.js",
   "keywords": [
     "swc",
     "executor",
