@@ -7,6 +7,10 @@ import { resolve as pathResolve, dirname, join } from 'path';
 import { resolveTsConfigPaths } from './utils';
 
 export function register() {
+  if (process.setSourceMapsEnabled) {
+    process.setSourceMapsEnabled(true);
+  }
+
   const requireExt = (Module as any)._extensions;
   const targetExtensions = ['.ts', '.tsx', '.cts'];
   const extensionsToResolve = ['.ts', '.tsx', '.cts', '.cjs', '.js'];
