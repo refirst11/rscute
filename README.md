@@ -2,12 +2,8 @@
 
 A lightweight, SWC-powered TypeScript JIT runner for Node.js.
 
-> **What's in a name?**
->
-> - **RS** = Rust (leveraging the speed of **SWC** under the hood).
-> - **cute** = e**xecute** (nimble, lightweight, and smart execution).
->
-> **rscute** intercepts module imports on-the-fly and compiles TypeScript files on-demand — zero config, zero build step.
+The name comes from **RS** (Rust, via SWC) + **cute** (execute) — nimble, lightweight, smart execution.
+rscute intercepts module imports on-the-fly and compiles TypeScript files on-demand — zero config, zero build step.
 
 ---
 
