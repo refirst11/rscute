@@ -1,6 +1,6 @@
 {
   "name": "rscute",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "description": "SWC-powered TypeScript JIT runner for Node.js",
   "keywords": [
     "swc",
@@ -41,7 +41,8 @@
     "test": "node integration_test.js"
   },
   "dependencies": {
-    "@swc/core": "1.15.43"
+    "@swc/core": "1.15.43",
+    "get-tsconfig": "^4.14.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
