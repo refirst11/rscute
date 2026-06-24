@@ -1,70 +1,45 @@
-import { readFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { existsSync } from 'fs';
+import { getTsconfig, createPathsMatcher } from 'get-tsconfig';
 
-const fileCache = new Map<string, string>();
+type PathsMatcher = ((specifier: string) => string[]) | null;
 
-export function readFileCached(path: string): string {
-  if (fileCache.has(path)) return fileCache.get(path)!;
-  const content = readFileSync(path, 'utf-8');
-  fileCache.set(path, content);
-  return content;
-}
+const matcherCache = new Map<string, PathsMatcher>();
+const fsCache = new Map<string, any>();
 
-export function getProjectRoot(contextPath: string): string {
-  let current = contextPath;
-  while (true) {
-    if (existsSync(resolve(current, 'package.json')) || existsSync(resolve(current, 'tsconfig.json'))) {
-      return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) {
-      return contextPath;
-    }
-    current = parent;
+function getPathsMatcher(contextPath: string): PathsMatcher {
+  const tsconfig = getTsconfig(contextPath, 'tsconfig.json', fsCache);
+  const cacheKey = tsconfig?.path ?? contextPath;
+
+  if (matcherCache.has(cacheKey)) {
+    return matcherCache.get(cacheKey)!;
   }
-}
 
-export type LoadTSConfig = null | { paths: Record<string, string[]> };
-
-export function loadTsConfig(contextPath: string): LoadTSConfig {
-  const root = getProjectRoot(contextPath);
-  const tsConfigPath = resolve(root, 'tsconfig.json');
-  if (!existsSync(tsConfigPath)) {
-    return null;
-  }
-  try {
-    const config = JSON.parse(readFileSync(tsConfigPath, 'utf-8'));
-    return config.compilerOptions || null;
-  } catch {
-    return null;
-  }
+  const matcher = tsconfig ? createPathsMatcher(tsconfig) : null;
+  matcherCache.set(cacheKey, matcher);
+  return matcher;
 }
 
 export function resolveTsConfigPaths(importPath: string, contextPath: string): string | null {
-  const tsConfig = loadTsConfig(contextPath);
-  if (!tsConfig?.paths) return null;
+  const matcher = getPathsMatcher(contextPath);
+  if (!matcher) return null;
 
-  const baseDir = getProjectRoot(contextPath);
+  const candidates = matcher(importPath);
+  if (!candidates || candidates.length === 0) return null;
 
-  for (const [alias, targetPaths] of Object.entries(tsConfig.paths)) {
-    const aliasPrefix = alias.replace(/\*$/, '');
-    if (!importPath.startsWith(aliasPrefix)) continue;
+  const extensions = ['.ts', '.tsx', '.cts', '.mts', '.js', '.jsx', '.json'];
 
-    for (const target of targetPaths) {
-      const resolvedTarget = target.replace(/\*$/, '');
-      const candidatePath = resolve(baseDir, resolvedTarget + importPath.slice(aliasPrefix.length));
-      
-      const extensions = ['.ts', '.tsx', '.cts', '.mts', '.js', '.jsx', '.json'];
-      for (const ext of extensions) {
-        const pathWithExt = candidatePath + ext;
-        if (existsSync(pathWithExt)) {
-          return pathWithExt;
-        }
+  for (const candidate of candidates) {
+    // Check with extensions
+    for (const ext of extensions) {
+      const pathWithExt = candidate + ext;
+      if (existsSync(pathWithExt)) {
+        return pathWithExt;
       }
-      
-      if (existsSync(candidatePath)) {
-        return candidatePath;
-      }
+    }
+
+    // Check exact path
+    if (existsSync(candidate)) {
+      return candidate;
     }
   }
 
